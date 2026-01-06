@@ -598,7 +598,7 @@ KATANA_CUSTOM_HEADERS = [
 # Docs: https://github.com/lc/gau
 
 # Enable/disable GAU passive URL discovery
-GAU_ENABLED = False
+GAU_ENABLED = True
 
 # Docker image for GAU
 GAU_DOCKER_IMAGE = "sxcurity/gau:latest"
@@ -688,18 +688,24 @@ GAU_FILTER_DEAD_ENDPOINTS = True
 # Enable/disable Kiterunner API discovery
 KITERUNNER_ENABLED = True
 
-# Wordlist to use (run `kr wordlist list` to see all available):
-# IMPORTANT: Choose wordlist based on target technology:
-# - "apiroutes-251227" - REST APIs (Node.js, Python, Go, etc.)
-# - "php-251227"       - PHP applications (WordPress, Laravel, etc.)
-# - "aspx-251227"      - ASP.NET applications
-# - "jsp-251227"       - Java JSP applications
-# - "cgi-251227"       - CGI/Perl scripts
-# - "directories-251227" - Directory discovery (generic)
+# Wordlists to use (run `kr wordlist list` to see all available):
+# IMPORTANT: Choose wordlists based on target technology:
+# - "apiroutes-251227"        - REST APIs (Node.js, Python, Go, etc.) ~354k routes
+# - "directories-251227"      - Generic directories (/login/, /admin/, etc.) ~703k routes
+# - "raft-large-directories"  - SecLists classic directory wordlist ~62k routes
+# - "php-251227"              - PHP applications (WordPress, Laravel, etc.) ~177k routes
+# - "aspx-251227"             - ASP.NET applications ~82k routes
+# - "jsp-251227"              - Java JSP applications ~21k routes
+# - "cgi-251227"              - CGI/Perl scripts ~11k routes
 # - Custom path: "/path/to/wordlist.kite"
 #
-# NOTE: Using wrong wordlist = 0 results! API wordlist won't find PHP files.
-KITERUNNER_WORDLIST = "apiroutes-251227"
+# RECOMMENDED: Use multiple wordlists for comprehensive coverage
+# - Default covers: APIs + web directories + classic SecLists paths
+# - Add technology-specific wordlists based on detected stack (php, aspx, jsp)
+#
+# NOTE: Wordlists are MERGED into a single deduplicated file, then run in parallel
+#       with Katana and GAU. This eliminates duplicate routes across wordlists.
+KITERUNNER_WORDLISTS = ["apiroutes-251227", "directories-251227", "raft-large-directories"]
 
 # Request rate limit (requests per second)
 # Lower values are stealthier but slower

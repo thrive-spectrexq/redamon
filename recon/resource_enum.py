@@ -66,7 +66,7 @@ from params import (
     GAU_FILTER_DEAD_ENDPOINTS,
     # Kiterunner API discovery settings
     KITERUNNER_ENABLED,
-    KITERUNNER_WORDLIST,
+    KITERUNNER_WORDLISTS,
     KITERUNNER_RATE_LIMIT,
     KITERUNNER_CONNECTIONS,
     KITERUNNER_TIMEOUT,
@@ -151,19 +151,19 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None) -> d
     # Pull Docker images and ensure Kiterunner binary in parallel
     print("\n[*] Setting up tools...")
     kr_binary_path = None
-    kr_wordlist_path = None
 
     with ThreadPoolExecutor(max_workers=3) as executor:
         katana_future = executor.submit(pull_katana_docker_image, KATANA_DOCKER_IMAGE)
         if GAU_ENABLED:
             gau_future = executor.submit(pull_gau_docker_image, GAU_DOCKER_IMAGE)
-        if KITERUNNER_ENABLED:
-            kr_future = executor.submit(ensure_kiterunner_binary, KITERUNNER_WORDLIST)
+        if KITERUNNER_ENABLED and KITERUNNER_WORDLISTS:
+            # Ensure binary is available
+            kr_future = executor.submit(ensure_kiterunner_binary, KITERUNNER_WORDLISTS[0])
         katana_future.result()
         if GAU_ENABLED:
             gau_future.result()
-        if KITERUNNER_ENABLED:
-            kr_binary_path, kr_wordlist_path = kr_future.result()
+        if KITERUNNER_ENABLED and KITERUNNER_WORDLISTS:
+            kr_binary_path, _ = kr_future.result()
 
     # Check Tor status
     use_proxy = False
@@ -223,7 +223,7 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None) -> d
         print(f"  GAU URL verification: {GAU_VERIFY_URLS}")
     print(f"  Kiterunner enabled: {KITERUNNER_ENABLED}")
     if KITERUNNER_ENABLED:
-        print(f"  Kiterunner wordlist: {KITERUNNER_WORDLIST}")
+        print(f"  Kiterunner wordlists: {', '.join(KITERUNNER_WORDLISTS)}")
     print("=" * 70)
 
     start_time = datetime.now()
@@ -234,10 +234,10 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None) -> d
     gau_urls_by_domain = {}
     kr_results = []
 
-    # Run Katana, GAU, and Kiterunner in parallel
-    print("\n[*] Running URL discovery (Katana + GAU + Kiterunner in parallel)...")
+    # Run Katana and GAU in parallel first
+    print("\n[*] Running URL discovery (Katana + GAU in parallel)...")
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {}
 
         # Submit Katana crawler
@@ -273,27 +273,7 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None) -> d
                 use_proxy
             )
 
-        # Submit Kiterunner discovery if enabled (with binary paths)
-        if KITERUNNER_ENABLED and target_urls and kr_binary_path and kr_wordlist_path:
-            futures['kiterunner'] = executor.submit(
-                run_kiterunner_discovery,
-                target_urls,
-                kr_binary_path,
-                kr_wordlist_path,
-                KITERUNNER_WORDLIST,
-                KITERUNNER_RATE_LIMIT,
-                KITERUNNER_CONNECTIONS,
-                KITERUNNER_TIMEOUT,
-                KITERUNNER_SCAN_TIMEOUT,
-                KITERUNNER_THREADS,
-                KITERUNNER_IGNORE_STATUS,
-                KITERUNNER_MATCH_STATUS,
-                KITERUNNER_MIN_CONTENT_LENGTH,
-                KITERUNNER_HEADERS,
-                use_proxy
-            )
-
-        # Collect results
+        # Collect Katana and GAU results
         for name, future in futures.items():
             try:
                 if name == 'katana':
@@ -302,11 +282,42 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None) -> d
                 elif name == 'gau':
                     gau_urls, gau_urls_by_domain = future.result(timeout=GAU_TIMEOUT * len(GAU_PROVIDERS) + 180)
                     print(f"[+] GAU completed: {len(gau_urls)} URLs")
-                elif name == 'kiterunner':
-                    kr_results = future.result(timeout=KITERUNNER_SCAN_TIMEOUT + 120)
-                    print(f"[+] Kiterunner completed: {len(kr_results)} API endpoints")
             except Exception as e:
                 print(f"[!] {name} failed: {e}")
+
+    # Run Kiterunner sequentially for each wordlist
+    if KITERUNNER_ENABLED and target_urls and kr_binary_path and KITERUNNER_WORDLISTS:
+        print(f"\n[*] Running Kiterunner API discovery ({len(KITERUNNER_WORDLISTS)} wordlists sequentially)...")
+        for wordlist_name in KITERUNNER_WORDLISTS:
+            print(f"\n    [*] Processing wordlist: {wordlist_name}")
+            try:
+                # Use ASSETNOTE: prefix for -A flag wordlists
+                wordlist_path = f"ASSETNOTE:{wordlist_name}"
+                wordlist_results = run_kiterunner_discovery(
+                    target_urls,
+                    kr_binary_path,
+                    wordlist_path,
+                    wordlist_name,
+                    KITERUNNER_RATE_LIMIT,
+                    KITERUNNER_CONNECTIONS,
+                    KITERUNNER_TIMEOUT,
+                    KITERUNNER_SCAN_TIMEOUT,
+                    KITERUNNER_THREADS,
+                    KITERUNNER_IGNORE_STATUS,
+                    KITERUNNER_MATCH_STATUS,
+                    KITERUNNER_MIN_CONTENT_LENGTH,
+                    KITERUNNER_HEADERS,
+                    use_proxy
+                )
+                # Merge results, avoiding duplicates
+                existing_urls = {(r['url'], r['method']) for r in kr_results}
+                for result in wordlist_results:
+                    if (result['url'], result['method']) not in existing_urls:
+                        kr_results.append(result)
+                        existing_urls.add((result['url'], result['method']))
+                print(f"    [+] {wordlist_name}: {len(wordlist_results)} endpoints found, {len(kr_results)} total unique")
+            except Exception as e:
+                print(f"    [!] Kiterunner failed for {wordlist_name}: {e}")
 
     # Mark Katana endpoints with sources array
     print("\n[*] Organizing Katana endpoints...")
@@ -477,7 +488,8 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None) -> d
             # Kiterunner metadata
             'kiterunner_enabled': KITERUNNER_ENABLED,
             'kiterunner_binary_path': kr_binary_path if KITERUNNER_ENABLED else None,
-            'kiterunner_wordlist': KITERUNNER_WORDLIST if KITERUNNER_ENABLED else None,
+            'kiterunner_wordlists': KITERUNNER_WORDLISTS if KITERUNNER_ENABLED else [],
+            'kiterunner_wordlists_count': len(KITERUNNER_WORDLISTS) if KITERUNNER_ENABLED else 0,
             'kiterunner_endpoints_found': len(kr_results) if KITERUNNER_ENABLED else 0,
             'kiterunner_method_detection_enabled': KITERUNNER_DETECT_METHODS if KITERUNNER_ENABLED else False,
             'kiterunner_method_detection_mode': KITERUNNER_METHOD_DETECTION_MODE if KITERUNNER_ENABLED else None,
