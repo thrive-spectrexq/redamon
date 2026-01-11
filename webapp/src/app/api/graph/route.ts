@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/neo4j'
+import { getSession } from './neo4j'
 
 interface Neo4jNode {
   identity: { low: number; high: number }

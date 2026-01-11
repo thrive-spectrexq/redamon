@@ -73,12 +73,18 @@ User Question (REST API)
 ### Run with Docker
 
 ```bash
-# Build and start the agent
+# Build and start the agent, also after python code change
 docker-compose up --build
 
 # View logs
 docker-compose logs -f agent
 ```
+
+### To refresh after code changes
+```bash
+docker-compose down && docker-compose up --build
+```
+
 
 ## API Reference
 

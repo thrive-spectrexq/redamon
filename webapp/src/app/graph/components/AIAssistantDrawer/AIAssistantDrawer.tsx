@@ -1,9 +1,17 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react'
-import { Send, Bot, User, Loader2, AlertCircle, Sparkles, Wrench, RotateCcw } from 'lucide-react'
-import { agentApi, QueryResponse } from '@/lib/agentApi'
+import { Send, Bot, User, Loader2, AlertCircle, Sparkles, RotateCcw } from 'lucide-react'
 import styles from './AIAssistantDrawer.module.css'
+
+interface QueryResponse {
+  answer: string
+  tool_used: string | null
+  tool_output: string | null
+  session_id: string
+  message_count: number
+  error: string | null
+}
 
 interface Message {
   id: string
@@ -18,6 +26,7 @@ interface Message {
 interface AIAssistantDrawerProps {
   isOpen: boolean
   onClose: () => void
+  userId: string
   projectId: string
   sessionId: string
   onResetSession?: () => void
@@ -26,6 +35,7 @@ interface AIAssistantDrawerProps {
 export function AIAssistantDrawer({
   isOpen,
   onClose,
+  userId,
   projectId,
   sessionId,
   onResetSession,
@@ -33,7 +43,6 @@ export function AIAssistantDrawer({
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [showToolOutput, setShowToolOutput] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -54,7 +63,6 @@ export function AIAssistantDrawer({
   // Reset messages when session changes
   useEffect(() => {
     setMessages([])
-    setShowToolOutput(null)
   }, [sessionId])
 
   const handleSend = async () => {
@@ -73,7 +81,23 @@ export function AIAssistantDrawer({
     setIsLoading(true)
 
     try {
-      const response: QueryResponse = await agentApi.query(question, projectId, sessionId)
+      const res = await fetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          user_id: userId,
+          project_id: projectId,
+          session_id: sessionId,
+        }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Agent API error: ${res.status}`)
+      }
+
+      const response: QueryResponse = await res.json()
 
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
@@ -115,13 +139,8 @@ export function AIAssistantDrawer({
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
   }
 
-  const toggleToolOutput = (messageId: string) => {
-    setShowToolOutput((prev) => (prev === messageId ? null : messageId))
-  }
-
   const handleNewChat = () => {
     setMessages([])
-    setShowToolOutput(null)
     onResetSession?.()
   }
 
@@ -218,22 +237,6 @@ export function AIAssistantDrawer({
                 </div>
               )}
 
-              {message.toolUsed && (
-                <button
-                  className={styles.toolBadge}
-                  onClick={() => toggleToolOutput(message.id)}
-                  aria-expanded={showToolOutput === message.id}
-                >
-                  <Wrench size={12} />
-                  <span>{message.toolUsed}</span>
-                </button>
-              )}
-
-              {showToolOutput === message.id && message.toolOutput && (
-                <div className={styles.toolOutput}>
-                  <pre>{message.toolOutput}</pre>
-                </div>
-              )}
             </div>
           </div>
         ))}

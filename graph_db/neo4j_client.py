@@ -257,13 +257,12 @@ class Neo4jClient:
                         MERGE (s:Subdomain {name: $name})
                         SET s.user_id = $user_id,
                             s.project_id = $project_id,
-                            s.is_target = $is_target,
                             s.has_dns_records = $has_records,
                             s.discovered_at = datetime(),
                             s.updated_at = datetime()
                         """,
                         name=subdomain, user_id=user_id, project_id=project_id,
-                        is_target=(subdomain == target), has_records=has_records
+                        has_records=has_records
                     )
                     stats["subdomains_created"] += 1
 

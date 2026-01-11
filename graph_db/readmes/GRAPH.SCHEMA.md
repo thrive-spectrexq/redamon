@@ -162,7 +162,6 @@ Discovered subdomains/hostnames under a domain.
 ```cypher
 (:Subdomain {
     name: "testphp.vulnweb.com",           // Full hostname (UNIQUE per domain)
-    is_target: true,                        // Was this the original target?
     has_dns_records: true,
     discovered_at: datetime
 })

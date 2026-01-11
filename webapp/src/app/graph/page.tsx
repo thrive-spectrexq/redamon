@@ -8,10 +8,11 @@ import { AIAssistantDrawer } from './components/AIAssistantDrawer'
 import { PageBottomBar } from './components/PageBottomBar'
 import { useGraphData, useDimensions, useNodeSelection } from './hooks'
 import { useTheme, useSession } from '@/hooks'
+import config from '@/config.json'
 import styles from './page.module.css'
 
 export default function GraphPage() {
-  const projectId = 'project_2'
+  const { user_id: userId, project_id: projectId } = config
   const [is3D, setIs3D] = useState(true)
   const [showLabels, setShowLabels] = useState(false)
   const [isAIOpen, setIsAIOpen] = useState(false)
@@ -70,6 +71,7 @@ export default function GraphPage() {
       <AIAssistantDrawer
         isOpen={isAIOpen}
         onClose={handleCloseAI}
+        userId={userId}
         projectId={projectId}
         sessionId={sessionId || ''}
         onResetSession={resetSession}
