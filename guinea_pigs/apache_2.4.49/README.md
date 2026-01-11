@@ -77,3 +77,4 @@ Use this endpoint for ALB/NLB health checks:
 docker-compose down          # Stop container
 # Then terminate EC2 instance
 ```
+

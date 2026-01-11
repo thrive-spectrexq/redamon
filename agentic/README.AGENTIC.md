@@ -834,6 +834,10 @@ result = agent.run(
 
 ## Example Agent Execution Traces
 
+
+Some instruction:
+use only meterpreter for exploit and post exploit
+
 ### Scenario A: Unknown Target (No Graph Data)
 
 ```
