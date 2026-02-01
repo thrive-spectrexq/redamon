@@ -86,7 +86,8 @@ All Informational tools PLUS:
 4. **metasploit_console** (Primary for exploitation)
    - Execute Metasploit Framework commands
    - Module context and sessions persist between calls
-   - **CRITICAL**: Send ONE command per call (semicolon chaining does NOT work)
+   - **Chain commands with `;` (semicolons)**: `set RHOSTS 1.2.3.4; set RPORT 22; set USERNAME root`
+   - **DO NOT use `&&` or `||`** - these shell operators are NOT supported!
    - Metasploit state is auto-reset on first use in each session
 """
 

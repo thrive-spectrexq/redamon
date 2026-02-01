@@ -195,3 +195,15 @@ def get_allowed_tools_for_phase(phase: str) -> list:
         for tool_name, allowed_phases in TOOL_PHASE_MAP.items()
         if phase in allowed_phases
     ]
+
+
+# =============================================================================
+# BRUTE FORCE CREDENTIAL GUESS SETTINGS
+# =============================================================================
+
+# Maximum number of different wordlist combinations to try before giving up.
+# Each attempt uses a different wordlist strategy:
+#   Attempt 1: Context-aware (OS/cloud-specific username + common passwords)
+#   Attempt 2: General comprehensive (unix_users.txt + unix_passwords.txt)
+#   Attempt 3: Service-specific defaults (if available)
+BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS = 3

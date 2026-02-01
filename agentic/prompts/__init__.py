@@ -58,6 +58,7 @@ from params import (
     INFORMATIONAL_SYSTEM_PROMPT,
     EXPL_SYSTEM_PROMPT,
     POST_EXPL_SYSTEM_PROMPT,
+    BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS,
 )
 
 
@@ -122,8 +123,12 @@ def get_phase_tools(
     elif phase == "exploitation":
         # SELECT WORKFLOW BASED ON ATTACK PATH TYPE
         if attack_path_type == "brute_force_credential_guess":
-            parts.append(BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS)
-            # No payload guidance for brute force credential guess - it's already in the prompt
+            # Format with max attempts from params
+            parts.append(BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS.format(
+                brute_force_max_attempts=BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS
+            ))
+            # Add wordlist reference guide
+            parts.append(BRUTE_FORCE_CREDENTIAL_GUESS_WORDLIST_GUIDANCE)
         else:
             # CVE-based exploitation (default)
             parts.append(CVE_EXPLOIT_TOOLS)

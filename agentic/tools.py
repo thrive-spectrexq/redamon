@@ -86,18 +86,24 @@ class MCPToolsManager:
         all_tools = []
 
         # Try to connect to each MCP server
+        # Timeout settings (in seconds):
+        # - timeout: HTTP connection timeout (default 5s)
+        # - sse_read_timeout: How long to wait for SSE events (default 300s = 5 min)
+        # Metasploit needs longer timeouts for brute force attacks (30 min for large wordlists)
         server_configs = [
-            ("curl", self.curl_url),
-            ("naabu", self.naabu_url),
-            ("metasploit", self.metasploit_url),
+            ("curl", self.curl_url, 60, 300),           # 1 min connect, 5 min read
+            ("naabu", self.naabu_url, 60, 600),         # 1 min connect, 10 min read
+            ("metasploit", self.metasploit_url, 60, 1800),  # 1 min connect, 30 min read
         ]
 
-        for server_name, url in server_configs:
+        for server_name, url, timeout, sse_read_timeout in server_configs:
             try:
                 logger.info(f"Connecting to MCP {server_name} server at {url}")
                 mcp_servers[server_name] = {
                     "url": url,
                     "transport": "sse",
+                    "timeout": timeout,
+                    "sse_read_timeout": sse_read_timeout,
                 }
             except Exception as e:
                 logger.warning(f"Failed to configure MCP server {server_name}: {e}")

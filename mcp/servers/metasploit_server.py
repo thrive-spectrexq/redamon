@@ -31,9 +31,9 @@ SERVER_PORT = int(os.getenv("METASPLOIT_PORT", "8003"))
 DEBUG = os.getenv("MSF_DEBUG", "false").lower() == "true"
 
 # Timing configuration (set by run_servers.py or use defaults)
-# Brute force (run command): 20 min timeout, 5 min quiet
-MSF_RUN_TIMEOUT = int(os.getenv("MSF_RUN_TIMEOUT", "1200"))
-MSF_RUN_QUIET_PERIOD = float(os.getenv("MSF_RUN_QUIET_PERIOD", "300"))
+# Brute force (run command): 30 min timeout, 2 min quiet (with VERBOSE=true, output comes frequently)
+MSF_RUN_TIMEOUT = int(os.getenv("MSF_RUN_TIMEOUT", "1800"))
+MSF_RUN_QUIET_PERIOD = float(os.getenv("MSF_RUN_QUIET_PERIOD", "120"))
 # CVE exploits (exploit command): 10 min timeout, 3 min quiet
 MSF_EXPLOIT_TIMEOUT = int(os.getenv("MSF_EXPLOIT_TIMEOUT", "600"))
 MSF_EXPLOIT_QUIET_PERIOD = float(os.getenv("MSF_EXPLOIT_QUIET_PERIOD", "180"))
@@ -188,10 +188,18 @@ class PersistentMsfConsole:
                 except queue.Empty:
                     break
 
-            # Send command
+            # Send command(s) - split by semicolons to support chaining
+            # msfconsole doesn't parse semicolons in stdin, so we convert them to newlines
             try:
-                self.process.stdin.write(command + "\n")
-                self.process.stdin.flush()
+                if ';' in command:
+                    # Split by semicolons and send each as separate line
+                    commands = [cmd.strip() for cmd in command.split(';') if cmd.strip()]
+                    for cmd in commands:
+                        self.process.stdin.write(cmd + "\n")
+                    self.process.stdin.flush()
+                else:
+                    self.process.stdin.write(command + "\n")
+                    self.process.stdin.flush()
             except Exception as e:
                 return f"[ERROR] Failed to send command: {e}"
 
