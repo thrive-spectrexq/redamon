@@ -8,7 +8,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from params import LOG_MAX_MB, LOG_BACKUP_COUNT
+from project_settings import get_setting
 
 # =============================================================================
 # LOGGING SETTINGS
@@ -19,7 +19,7 @@ LOG_DIR = Path(__file__).parent / "logs"
 
 # Log file settings
 LOG_FILE_NAME = "agent.log"
-LOG_MAX_BYTES = LOG_MAX_MB * 1024 * 1024  # Convert MB to bytes
+LOG_MAX_BYTES = get_setting('LOG_MAX_MB', 10) * 1024 * 1024  # Convert MB to bytes
 
 # Log levels
 FILE_LOG_LEVEL = logging.DEBUG
@@ -70,7 +70,7 @@ def setup_logging(
         file_handler = RotatingFileHandler(
             filename=str(log_file_path),
             maxBytes=LOG_MAX_BYTES,
-            backupCount=LOG_BACKUP_COUNT,
+            backupCount=get_setting('LOG_BACKUP_COUNT', 5),
             encoding="utf-8",
         )
         file_handler.setLevel(FILE_LOG_LEVEL)
@@ -94,7 +94,7 @@ def setup_logging(
     # Log startup message
     logger = logging.getLogger(__name__)
     logger.info(f"Logging configured - File: {LOG_DIR / LOG_FILE_NAME}")
-    logger.info(f"Max file size: {LOG_MAX_BYTES / 1024 / 1024:.1f} MB, Backup count: {LOG_BACKUP_COUNT}")
+    logger.info(f"Max file size: {LOG_MAX_BYTES / 1024 / 1024:.1f} MB, Backup count: {get_setting('LOG_BACKUP_COUNT', 5)}")
 
 
 def get_logger(name: str) -> logging.Logger:

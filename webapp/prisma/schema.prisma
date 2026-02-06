@@ -241,5 +241,28 @@ model Project {
   securityCheckTimeout              Int     @default(10) @map("security_check_timeout")
   securityCheckMaxWorkers           Int     @default(10) @map("security_check_max_workers")
 
+  // ========== AGENT BEHAVIOUR ==========
+  agentOpenaiModel                      String   @default("gpt-5.2") @map("agent_openai_model")
+  agentInformationalSystemPrompt        String   @default("") @map("agent_informational_system_prompt")
+  agentExplSystemPrompt                 String   @default("") @map("agent_expl_system_prompt")
+  agentPostExplSystemPrompt             String   @default("") @map("agent_post_expl_system_prompt")
+  agentActivatePostExplPhase            Boolean  @default(true) @map("agent_activate_post_expl_phase")
+  agentPostExplPhaseType                String   @default("statefull") @map("agent_post_expl_phase_type")
+  agentLhost                            String   @default("") @map("agent_lhost")
+  agentLport                            Int?     @map("agent_lport")
+  agentBindPortOnTarget                 Int      @default(4444) @map("agent_bind_port_on_target")
+  agentPayloadUseHttps                  Boolean  @default(false) @map("agent_payload_use_https")
+  agentMaxIterations                    Int      @default(100) @map("agent_max_iterations")
+  agentExecutionTraceMemorySteps        Int      @default(100) @map("agent_execution_trace_memory_steps")
+  agentRequireApprovalForExploitation   Boolean  @default(true) @map("agent_require_approval_for_exploitation")
+  agentRequireApprovalForPostExploitation Boolean @default(true) @map("agent_require_approval_for_post_exploitation")
+  agentToolOutputMaxChars               Int      @default(8000) @map("agent_tool_output_max_chars")
+  agentCypherMaxRetries                 Int      @default(3) @map("agent_cypher_max_retries")
+  agentCreateGraphImageOnInit           Boolean  @default(false) @map("agent_create_graph_image_on_init")
+  agentLogMaxMb                         Int      @default(10) @map("agent_log_max_mb")
+  agentLogBackupCount                   Int      @default(5) @map("agent_log_backup_count")
+  agentToolPhaseMap                     Json     @default("{\"query_graph\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_curl\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"execute_naabu\":[\"informational\",\"exploitation\",\"post_exploitation\"],\"metasploit_console\":[\"exploitation\",\"post_exploitation\"],\"msf_restart\":[\"exploitation\",\"post_exploitation\"]}") @map("agent_tool_phase_map")
+  agentBruteForceMaxWordlistAttempts    Int      @default(3) @map("agent_brute_force_max_wordlist_attempts")
+
   @@map("projects")
 }

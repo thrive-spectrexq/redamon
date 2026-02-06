@@ -9,7 +9,7 @@ from typing import Annotated, TypedDict, Optional, List, Literal, Dict
 from datetime import datetime, timezone
 import uuid
 
-from params import MAX_ITERATIONS, EXECUTION_TRACE_MEMORY_STEPS
+from project_settings import get_setting
 
 
 def utc_now() -> datetime:
@@ -423,9 +423,11 @@ def create_initial_state(
     project_id: str,
     session_id: str,
     objective: str,
-    max_iterations: int = MAX_ITERATIONS
+    max_iterations: int = None
 ) -> dict:
     """Create initial state for a new agent session."""
+    if max_iterations is None:
+        max_iterations = get_setting('MAX_ITERATIONS', 100)
     # Create first objective
     first_objective = ConversationObjective(content=objective).model_dump()
 
@@ -520,7 +522,7 @@ def format_execution_trace(
         return "No steps executed yet."
 
     # Use configured limit or override
-    limit = last_n if last_n is not None else EXECUTION_TRACE_MEMORY_STEPS
+    limit = last_n if last_n is not None else get_setting('EXECUTION_TRACE_MEMORY_STEPS', 100)
 
     # Apply limit to trace (most recent steps)
     limited_trace = trace[-limit:] if len(trace) > limit else trace
@@ -616,7 +618,7 @@ def _format_single_step(step: dict) -> List[str]:
 
 def summarize_trace_for_response(trace: List[dict], last_n: int = None) -> List[dict]:
     """Create a summary of the execution trace for API response."""
-    limit = last_n if last_n is not None else EXECUTION_TRACE_MEMORY_STEPS
+    limit = last_n if last_n is not None else get_setting('EXECUTION_TRACE_MEMORY_STEPS', 100)
     recent = trace[-limit:] if len(trace) > limit else trace
 
     return [

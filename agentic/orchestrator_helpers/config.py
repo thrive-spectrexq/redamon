@@ -3,12 +3,7 @@
 from typing import TYPE_CHECKING, Tuple, List
 
 from state import AgentState
-from params import (
-    MAX_ITERATIONS,
-    LHOST,
-    LPORT,
-    BIND_PORT_ON_TARGET,
-)
+from project_settings import get_setting
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.memory import MemorySaver
@@ -68,7 +63,7 @@ def create_config(
     return {
         # LangGraph recursion limit - must be higher than MAX_ITERATIONS
         # Each iteration may have multiple graph transitions (think -> execute -> analyze)
-        "recursion_limit": MAX_ITERATIONS * 5,
+        "recursion_limit": get_setting('MAX_ITERATIONS', 100) * 5,
         "configurable": {
             "thread_id": thread_id,
             "user_id": user_id,
@@ -178,6 +173,10 @@ def is_session_config_complete() -> Tuple[bool, List[str]]:
         - is_complete: True if all required params are set
         - missing_params_list: List of parameter names that are missing
     """
+    LPORT = get_setting('LPORT')
+    LHOST = get_setting('LHOST', '') or None
+    BIND_PORT_ON_TARGET = get_setting('BIND_PORT_ON_TARGET', 4444)
+
     use_reverse = LPORT is not None and LPORT > 0
     use_bind = not use_reverse and BIND_PORT_ON_TARGET is not None and BIND_PORT_ON_TARGET > 0
 

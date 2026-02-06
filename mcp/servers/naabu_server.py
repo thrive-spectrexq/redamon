@@ -11,7 +11,11 @@ Tools:
 from fastmcp import FastMCP
 import subprocess
 import shlex
+import re
 import os
+
+# Strip ANSI escape codes (terminal colors) from output
+ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
 
 # Server configuration
 SERVER_NAME = "naabu"
@@ -63,11 +67,12 @@ def execute_naabu(args: str) -> str:
             text=True,
             timeout=300
         )
-        output = result.stdout
+        output = ANSI_ESCAPE.sub('', result.stdout)
         if result.stderr:
-            # Filter out progress/info messages, keep errors
+            # Strip ANSI codes then filter out progress/info messages, keep errors
+            clean_stderr = ANSI_ESCAPE.sub('', result.stderr)
             stderr_lines = [
-                line for line in result.stderr.split('\n')
+                line for line in clean_stderr.split('\n')
                 if line and not line.startswith('[INF]')
             ]
             if stderr_lines:

@@ -217,6 +217,7 @@ export default function GraphPage() {
         projectId={projectId || ''}
         sessionId={sessionId || ''}
         onResetSession={resetSession}
+        modelName={currentProject?.agentOpenaiModel}
       />
 
       <ReconConfirmModal

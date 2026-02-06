@@ -47,6 +47,7 @@ from .katana_helpers import (
 
 # CVE lookup
 from .cve_helpers import (
+    split_server_header,
     parse_technology_string,
     normalize_product_name,
     classify_cvss_score,
@@ -102,6 +103,7 @@ __all__ = [
     # Katana
     "run_katana_crawler",
     # CVE
+    "split_server_header",
     "parse_technology_string",
     "normalize_product_name",
     "classify_cvss_score",

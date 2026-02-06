@@ -18,6 +18,7 @@ import { CveLookupSection } from './sections/CveLookupSection'
 import { MitreSection } from './sections/MitreSection'
 import { SecurityChecksSection } from './sections/SecurityChecksSection'
 import { GithubSection } from './sections/GithubSection'
+import { AgentBehaviourSection } from './sections/AgentBehaviourSection'
 
 type ProjectFormData = Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'user'>
 
@@ -51,6 +52,7 @@ const TABS = [
   { id: 'cve', label: 'CVE & MITRE' },
   { id: 'security', label: 'Security Checks' },
   { id: 'integrations', label: 'Integrations' },
+  { id: 'agent', label: 'Agent Behaviour' },
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -305,6 +307,10 @@ export function ProjectForm({
 
         {activeTab === 'integrations' && (
           <GithubSection data={formData} updateField={updateField} />
+        )}
+
+        {activeTab === 'agent' && (
+          <AgentBehaviourSection data={formData} updateField={updateField} />
         )}
           </div>
         </>

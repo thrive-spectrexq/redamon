@@ -11,12 +11,13 @@ The **RedAmon Agentic System** is an AI-powered penetration testing orchestrator
 1. [Architecture Overview](#architecture-overview)
 2. [Core Components](#core-components)
 3. [LangGraph State Machine](#langgraph-state-machine)
-4. [Tool Execution & MCP Integration](#tool-execution--mcp-integration)
-5. [WebSocket Streaming](#websocket-streaming)
-6. [Frontend Integration](#frontend-integration)
-7. [Detailed Workflows](#detailed-workflows)
-8. [Multi-Objective Support](#multi-objective-support)
-9. [Security & Multi-Tenancy](#security--multi-tenancy)
+4. [Attack Path Classification](#attack-path-classification)
+5. [Tool Execution & MCP Integration](#tool-execution--mcp-integration)
+6. [WebSocket Streaming](#websocket-streaming)
+7. [Frontend Integration](#frontend-integration)
+8. [Detailed Workflows](#detailed-workflows)
+9. [Multi-Objective Support](#multi-objective-support)
+10. [Security & Multi-Tenancy](#security--multi-tenancy)
 
 ---
 
@@ -88,16 +89,28 @@ flowchart TB
 
 ### File Structure
 
-| File | Purpose |
-|------|---------|
+| File / Directory | Purpose |
+|------------------|---------|
 | `orchestrator.py` | Main LangGraph agent with ReAct pattern |
 | `state.py` | Pydantic models and TypedDict state definitions |
-| `prompts.py` | System prompts for LLM reasoning |
+| `project_settings.py` | Database-driven configuration (replaces `params.py`) |
 | `tools.py` | MCP and Neo4j tool management |
 | `api.py` | REST API endpoints |
 | `websocket_api.py` | WebSocket streaming API |
-| `params.py` | Configuration parameters |
 | `utils.py` | Utility functions |
+| `prompts/` | System prompts package (phase-aware, attack-path-specific) |
+| `prompts/base.py` | Core ReAct, analysis, and report prompts |
+| `prompts/classification.py` | Attack path classification prompt |
+| `prompts/cve_exploit_prompts.py` | CVE exploitation workflow & payload guidance |
+| `prompts/brute_force_credential_guess_prompts.py` | Brute force / credential attack workflow |
+| `prompts/post_exploitation.py` | Post-exploitation prompts (statefull, shell, stateless) |
+| `orchestrator_helpers/` | Helper modules extracted from orchestrator |
+| `orchestrator_helpers/config.py` | Session config, checkpointer, thread ID management |
+| `orchestrator_helpers/phase.py` | Attack path classification & phase determination |
+| `orchestrator_helpers/detection.py` | Session & credential detection from tool output |
+| `orchestrator_helpers/parsing.py` | LLM response parsing (decisions & analysis) |
+| `orchestrator_helpers/json_utils.py` | JSON serialization with datetime support |
+| `orchestrator_helpers/debug.py` | Graph visualization (Mermaid PNG export) |
 
 ### Key Classes
 
@@ -112,6 +125,8 @@ classDiagram
         +invoke_with_streaming(question, ..., streaming_callback)
         +resume_after_approval(...)
         +resume_after_answer(...)
+        +resume_after_approval_with_streaming(...)
+        +resume_after_answer_with_streaming(...)
     }
 
     class PhaseAwareToolExecutor {
@@ -119,6 +134,7 @@ classDiagram
         +graph_tool: Neo4jToolManager
         +phase_tools: Dict
         +execute(tool_name, tool_args, phase)
+        +execute_with_progress(tool_name, tool_args, phase, progress_callback)
         +get_tools_for_phase(phase)
     }
 
@@ -140,11 +156,14 @@ classDiagram
         +on_thinking(iteration, phase, thought, reasoning)
         +on_tool_start(tool_name, tool_args)
         +on_tool_output_chunk(tool_name, chunk, is_final)
-        +on_tool_complete(tool_name, success, output_summary)
-        +on_phase_update(current_phase, iteration_count)
+        +on_tool_complete(tool_name, success, output_summary, actionable_findings, recommended_next_steps)
+        +on_phase_update(current_phase, iteration_count, attack_path_type)
         +on_approval_request(approval_request)
         +on_question_request(question_request)
         +on_response(answer, iteration_count, phase, task_complete)
+        +on_execution_step(step)
+        +on_error(error_message, recoverable)
+        +on_task_complete(message, final_phase, total_iterations)
     }
 
     AgentOrchestrator --> PhaseAwareToolExecutor
@@ -168,8 +187,10 @@ erDiagram
         int current_iteration "Current loop iteration"
         int max_iterations "Maximum allowed iterations"
         string current_phase "informational|exploitation|post_exploitation"
+        string attack_path_type "cve_exploit|brute_force_credential_guess"
         bool task_complete "Whether objective is achieved"
         string completion_reason "Why task ended"
+        bool msf_session_reset_done "Metasploit auto-reset tracking"
     }
 
     AgentState ||--o{ ExecutionStep : execution_trace
@@ -183,6 +204,7 @@ erDiagram
     AgentState ||--o| UserQuestionRequest : pending_question
 
     ExecutionStep {
+        string step_id "Unique step identifier"
         int iteration "Step number"
         string phase "Phase during step"
         string thought "LLM reasoning"
@@ -196,12 +218,14 @@ erDiagram
 
     TargetInfo {
         string primary_target "Main target IP/domain"
+        string target_type "ip|hostname|domain|url"
         list ports "Discovered ports"
         list services "Detected services"
         list technologies "Identified technologies"
         list vulnerabilities "Found vulnerabilities"
-        list credentials "Extracted credentials"
-        list sessions "Active Metasploit sessions"
+        list credentials "Extracted credentials (brute force)"
+        list sessions "Active Metasploit session IDs"
+        dict session_details "Rich session metadata per ID"
     }
 
     TodoItem {
@@ -264,33 +288,38 @@ flowchart LR
     subgraph InitDesc["Initialize Node"]
         I1[Setup state for new session]
         I2[Detect multi-objective scenarios]
-        I3[Route approval/answer resumption]
-        I4[Migrate legacy state]
+        I3[Classify attack path via LLM]
+        I4[Route approval/answer resumption]
+        I5[Migrate legacy state]
     end
 
     subgraph ThinkDesc["Think Node - LLM Call #1"]
-        T1[Build system prompt with context]
-        T2[Format execution trace]
+        T1[Build system prompt with attack-path-specific tools]
+        T2[Format execution trace with objective grouping]
         T3[Get LLM decision JSON]
         T4[Parse action: use_tool/transition_phase/complete/ask_user]
         T5[Update todo list]
+        T6[Pre-exploitation validation: force ask_user if LHOST/LPORT missing]
     end
 
     subgraph ExecDesc["Execute Tool Node"]
         E1[Validate tool for current phase]
         E2[Set tenant context]
-        E3[Auto-reset Metasploit on first use]
+        E3[Auto-reset Metasploit on first use via msf_restart]
         E4[Execute via MCP or Neo4j]
-        E5[Capture output and errors]
+        E5[Stream progress for long-running MSF commands]
+        E6[Capture output and errors]
     end
 
     subgraph AnalyzeDesc["Analyze Output Node - LLM Call #2"]
         A1[Truncate output if too long]
         A2[LLM interprets tool output]
         A3[Extract target info: ports, services, vulns]
-        A4[Identify actionable findings]
-        A5[Recommend next steps]
-        A6[Add step to execution trace]
+        A4[Detect sessions from output regex]
+        A5[Detect credentials from brute force output]
+        A6[Identify actionable findings]
+        A7[Recommend next steps]
+        A8[Add step to execution trace]
     end
 
     subgraph GenDesc["Generate Response Node - LLM Call #3"]
@@ -304,6 +333,107 @@ flowchart LR
     EXEC -.-> ExecDesc
     ANALYZE -.-> AnalyzeDesc
     GEN -.-> GenDesc
+```
+
+---
+
+## Attack Path Classification
+
+When a new objective is detected, the system uses an LLM-based classifier to determine the **attack path type** and **required phase** before execution begins. This drives dynamic tool routing throughout the session.
+
+### Attack Path Types
+
+| Type | Description | Example Objective |
+|------|-------------|-------------------|
+| `cve_exploit` | CVE-based exploitation using known vulnerabilities | "Exploit CVE-2021-41773 on 192.168.1.100" |
+| `brute_force_credential_guess` | Brute force / credential attacks against services | "Try SSH brute force on 192.168.1.100" |
+
+### Classification Flow
+
+```mermaid
+flowchart TB
+    MSG[New user objective arrives] --> CLASSIFY[LLM classifies objective]
+
+    CLASSIFY --> RESULT{AttackPathClassification}
+
+    RESULT --> CVE[cve_exploit]
+    RESULT --> BRUTE[brute_force_credential_guess]
+
+    CVE --> CVE_TOOLS[CVE Exploit Tools<br/>search → use → info → set → exploit]
+    CVE --> CVE_PAYLOAD{Payload Mode}
+    CVE_PAYLOAD --> STATEFULL_CVE[Statefull: Meterpreter/Staged payloads<br/>+ LHOST/LPORT config]
+    CVE_PAYLOAD --> STATELESS_CVE[Stateless: Command/Exec payloads]
+
+    BRUTE --> BRUTE_TOOLS[Brute Force Tools<br/>use auxiliary/scanner → set → run]
+    BRUTE --> BRUTE_POST[Post-Expl: Shell session<br/>via CreateSession=true]
+
+    style CVE fill:#FFD700
+    style BRUTE fill:#FF6B6B
+    style CLASSIFY fill:#87CEEB
+```
+
+### Classification Model
+
+```python
+class AttackPathClassification(BaseModel):
+    required_phase: Phase           # "informational" or "exploitation"
+    attack_path_type: AttackPathType  # "cve_exploit" or "brute_force_credential_guess"
+    confidence: float               # 0.0-1.0 confidence score
+    reasoning: str                  # Explanation for the classification
+    detected_service: Optional[str] # e.g., "ssh", "mysql" (for brute force)
+```
+
+The classifier runs with retry logic (exponential backoff, max 3 retries) and falls back to `("cve_exploit", "informational")` on failure.
+
+### Dynamic Tool Routing
+
+Based on the classified attack path, `get_phase_tools()` assembles different prompt guidance:
+
+| Phase | CVE Exploit Path | Brute Force Path |
+|-------|-----------------|------------------|
+| **Informational** | Standard recon tools | Standard recon tools |
+| **Exploitation** | `CVE_EXPLOIT_TOOLS` + payload guidance (statefull/stateless) | `BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS` + wordlist guidance |
+| **Post-Exploitation** | `POST_EXPLOITATION_TOOLS_STATEFULL` (Meterpreter) | `POST_EXPLOITATION_TOOLS_SHELL` (SSH shell session) |
+
+### Pre-Exploitation Validation
+
+Before executing Metasploit commands in **statefull CVE exploit** mode, the system validates session configuration:
+
+```mermaid
+flowchart TB
+    THINK[Think Node decides: use metasploit_console] --> CHECK{Statefull mode +<br/>CVE exploit path?}
+
+    CHECK -->|No| EXEC[Execute tool normally]
+    CHECK -->|Yes| VALIDATE{LHOST/LPORT<br/>configured?}
+
+    VALIDATE -->|Yes| EXEC
+    VALIDATE -->|No| QA_CHECK{Already answered<br/>in qa_history?}
+
+    QA_CHECK -->|Yes| EXEC
+    QA_CHECK -->|No| FORCE_ASK[Force ask_user action<br/>Request LHOST/LPORT from user]
+
+    FORCE_ASK --> PAUSE([Pause for user answer])
+    PAUSE --> THINK
+
+    style FORCE_ASK fill:#FFD700
+    style PAUSE fill:#FFD700
+```
+
+This prevents exploitation failures by ensuring reverse/bind payload parameters are available before the agent attempts to run Metasploit exploits. Brute force attacks bypass this check since they create direct shell sessions without needing LHOST/LPORT.
+
+### Credential Detection
+
+During brute force attacks, the analyze output node automatically extracts discovered credentials:
+
+```mermaid
+flowchart LR
+    OUTPUT[Tool output from<br/>auxiliary/scanner module] --> REGEX[Regex pattern match<br/>IP:PORT - Success: user:pass]
+
+    REGEX --> FOUND{Credentials found?}
+    FOUND -->|Yes| MERGE[Merge into TargetInfo.credentials]
+    FOUND -->|No| SKIP[No update]
+
+    MERGE --> TARGET[Updated target_info<br/>available in state]
 ```
 
 ---
@@ -463,8 +593,8 @@ flowchart LR
         THINKING[thinking<br/>{iteration, phase, thought, reasoning}]
         TOOL_START[tool_start<br/>{tool_name, tool_args}]
         TOOL_CHUNK[tool_output_chunk<br/>{tool_name, chunk, is_final}]
-        TOOL_COMPLETE[tool_complete<br/>{tool_name, success, output_summary}]
-        PHASE_UPDATE[phase_update<br/>{current_phase, iteration_count}]
+        TOOL_COMPLETE[tool_complete<br/>{tool_name, success, output_summary,<br/>actionable_findings, recommended_next_steps}]
+        PHASE_UPDATE[phase_update<br/>{current_phase, iteration_count, attack_path_type}]
         TODO_UPDATE[todo_update<br/>{todo_list}]
         APPROVAL_REQ[approval_request<br/>{from_phase, to_phase, reason, risks}]
         QUESTION_REQ[question_request<br/>{question, context, format, options}]
@@ -491,7 +621,7 @@ sequenceDiagram
     WS->>O: invoke_with_streaming(question, callback)
 
     loop For each graph event
-        O->>CB: on_phase_update("informational", 1)
+        O->>CB: on_phase_update("informational", 1, "cve_exploit")
         CB-->>WS: phase_update message
         WS-->>C: {type: "phase_update", ...}
 
@@ -608,19 +738,26 @@ flowchart TB
     INIT --> CHECK_RESUME{Resuming after<br/>approval/answer?}
     CHECK_RESUME -->|Yes, approval| PROC_A[Process Approval]
     CHECK_RESUME -->|Yes, answer| PROC_Q[Process Answer]
-    CHECK_RESUME -->|No| THINK[Think Node]
+    CHECK_RESUME -->|No| NEW_OBJ{New objective?}
+
+    NEW_OBJ -->|Yes| CLASSIFY[LLM classifies attack path<br/>+ required phase]
+    NEW_OBJ -->|No| THINK[Think Node]
+    CLASSIFY --> THINK
 
     PROC_A --> THINK
     PROC_Q --> THINK
 
-    THINK --> |"LLM Decision"| DECISION{Action?}
+    THINK --> PRE_VALID{Pre-exploitation<br/>validation}
+    PRE_VALID -->|Missing LHOST/LPORT| FORCE_ASK[Force ask_user]
+    PRE_VALID -->|OK| DECISION{Action?}
+    FORCE_ASK --> AWAIT_Q
 
     DECISION -->|use_tool| EXEC[Execute Tool]
     DECISION -->|transition_phase| PHASE_CHECK{Needs approval?}
     DECISION -->|ask_user| AWAIT_Q[Await Question]
     DECISION -->|complete| GEN[Generate Response]
 
-    EXEC --> ANALYZE[Analyze Output]
+    EXEC --> ANALYZE[Analyze Output<br/>+ detect sessions/credentials]
     ANALYZE --> ITER_CHECK{Max iterations?}
     ITER_CHECK -->|No| THINK
     ITER_CHECK -->|Yes| GEN
@@ -641,6 +778,7 @@ flowchart TB
     style END fill:#90EE90
     style PAUSE_A fill:#FFD700
     style PAUSE_Q fill:#FFD700
+    style CLASSIFY fill:#DDA0DD
     style THINK fill:#87CEEB
     style ANALYZE fill:#87CEEB
     style GEN fill:#87CEEB
@@ -688,7 +826,7 @@ sequenceDiagram
     end
 ```
 
-### Exploitation Workflow (Metasploit)
+### Exploitation Workflow: CVE Exploit Path
 
 ```mermaid
 sequenceDiagram
@@ -699,13 +837,15 @@ sequenceDiagram
 
     U->>A: "Exploit CVE-2021-41773 on 192.168.1.100"
 
+    Note over A: Initialize: LLM classifies → cve_exploit
     Note over A: Phase: Informational
     A->>A: Query graph for target info
     A->>A: Request phase transition to exploitation
 
     U->>A: Approve transition
 
-    Note over A: Phase: Exploitation
+    Note over A: Phase: Exploitation (cve_exploit path)
+    Note over A: Pre-exploitation: validate LHOST/LPORT
 
     A->>MSF: search CVE-2021-41773
     MSF-->>A: exploit/multi/http/apache_normalize_path_rce
@@ -737,22 +877,73 @@ sequenceDiagram
     A->>MSF: exploit
     MSF->>T: Send exploit payload
     T-->>MSF: Reverse shell connects
-    MSF-->>A: "Sending stage..."
+    MSF-->>A: "Sending stage..." (streamed via progress chunks)
 
-    Note over A: Use separate tool for session wait
+    Note over A: Session detected via regex in output
     A->>MSF: msf_wait_for_session(timeout=120)
     MSF-->>A: Session 1 opened
-
-    A->>MSF: sessions -l
-    MSF-->>A: Active sessions list
 
     A->>A: Request phase transition to post_exploitation
     U->>A: Approve transition
 
-    Note over A: Phase: Post-Exploitation
+    Note over A: Phase: Post-Exploitation (Meterpreter)
     A->>MSF: msf_session_run(1, "whoami")
     MSF->>T: Execute command in session
     T-->>MSF: "www-data"
+    MSF-->>A: Command output
+```
+
+### Exploitation Workflow: Brute Force Path
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as Agent
+    participant MSF as Metasploit Server
+    participant T as Target
+
+    U->>A: "Try SSH brute force on 192.168.1.100"
+
+    Note over A: Initialize: LLM classifies → brute_force_credential_guess
+    Note over A: Phase: Informational
+    A->>A: Query graph for target info (ports, services)
+    A->>A: Request phase transition to exploitation
+
+    U->>A: Approve transition
+
+    Note over A: Phase: Exploitation (brute_force path)
+    Note over A: No LHOST/LPORT needed (direct shell)
+
+    A->>MSF: use auxiliary/scanner/ssh/ssh_login
+    MSF-->>A: Module loaded
+
+    A->>MSF: set RHOSTS 192.168.1.100
+    MSF-->>A: RHOSTS => 192.168.1.100
+
+    A->>MSF: set USER_FILE /usr/share/wordlists/...
+    MSF-->>A: USER_FILE set
+
+    A->>MSF: set PASS_FILE /usr/share/wordlists/...
+    MSF-->>A: PASS_FILE set
+
+    A->>MSF: set CreateSession true
+    MSF-->>A: CreateSession => true
+
+    A->>MSF: run
+    MSF->>T: Try credentials
+    T-->>MSF: [+] Success: 'admin:password123'
+    MSF-->>A: Credential found + session created
+
+    Note over A: Credentials auto-extracted via regex
+    Note over A: Session detected in output
+
+    A->>A: Request phase transition to post_exploitation
+    U->>A: Approve transition
+
+    Note over A: Phase: Post-Exploitation (Shell session)
+    A->>MSF: msf_session_run(1, "whoami")
+    MSF->>T: Execute command via SSH session
+    T-->>MSF: "root"
     MSF-->>A: Command output
 ```
 
@@ -866,7 +1057,7 @@ flowchart LR
     end
 
     subgraph Phase["Phase Management"]
-        INFER[Infer required_phase from keywords]
+        INFER[LLM classifies attack path<br/>+ required_phase]
         DOWN{Downgrade to<br/>informational?}
         AUTO[Auto-transition<br/>no approval needed]
         UP{Upgrade to<br/>exploitation?}
@@ -943,7 +1134,7 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    subgraph Params["Configuration (params.py)"]
+    subgraph Params["Configuration (project_settings.py)"]
         REQ_EXPL[REQUIRE_APPROVAL_FOR_EXPLOITATION]
         REQ_POST[REQUIRE_APPROVAL_FOR_POST_EXPLOITATION]
         ACT_POST[ACTIVATE_POST_EXPL_PHASE]
@@ -1040,17 +1231,43 @@ flowchart TB
 
 ## Configuration Reference
 
-### Key Parameters (params.py)
+### Settings Source: `project_settings.py`
+
+Configuration is now **database-driven**. When `PROJECT_ID` and `WEBAPP_API_URL` environment variables are set, settings are fetched from PostgreSQL via the webapp API. Otherwise, `DEFAULT_AGENT_SETTINGS` provides fallback values for standalone usage.
+
+```mermaid
+flowchart LR
+    DB[(PostgreSQL)] --> API[Webapp API<br/>/api/projects/:id]
+    API --> PS[project_settings.py<br/>get_setting]
+    PS --> ORCH[Orchestrator]
+    PS --> PROMPTS[Prompts]
+    PS --> TOOLS[Tools]
+
+    DEFAULTS[DEFAULT_AGENT_SETTINGS] -.->|fallback| PS
+```
+
+### Key Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `OPENAI_MODEL` | "gpt-4o" | LLM model for reasoning |
-| `MAX_ITERATIONS` | 15 | Maximum ReAct loop iterations |
-| `REQUIRE_APPROVAL_FOR_EXPLOITATION` | true | Require user approval for exploitation phase |
-| `REQUIRE_APPROVAL_FOR_POST_EXPLOITATION` | true | Require user approval for post-exploitation |
-| `ACTIVATE_POST_EXPL_PHASE` | false | Enable post-exploitation phase |
-| `POST_EXPL_PHASE_TYPE` | "stateless" | "stateless" or "statefull" session mode |
-| `TOOL_OUTPUT_MAX_CHARS` | 10000 | Truncate tool output for LLM analysis |
+| `OPENAI_MODEL` | `"gpt-5.2"` | LLM model for reasoning |
+| `MAX_ITERATIONS` | `100` | Maximum ReAct loop iterations |
+| `EXECUTION_TRACE_MEMORY_STEPS` | `100` | How many steps to include in LLM context |
+| `TOOL_OUTPUT_MAX_CHARS` | `8000` | Truncate tool output for LLM analysis |
+| `REQUIRE_APPROVAL_FOR_EXPLOITATION` | `true` | Require user approval for exploitation phase |
+| `REQUIRE_APPROVAL_FOR_POST_EXPLOITATION` | `true` | Require user approval for post-exploitation |
+| `ACTIVATE_POST_EXPL_PHASE` | `true` | Enable post-exploitation phase |
+| `POST_EXPL_PHASE_TYPE` | `"statefull"` | `"stateless"` or `"statefull"` session mode |
+| `LHOST` | `""` | Attacker IP for reverse payloads (empty = bind mode) |
+| `LPORT` | `null` | Attacker port for reverse payloads |
+| `BIND_PORT_ON_TARGET` | `4444` | Port opened on target for bind payloads |
+| `PAYLOAD_USE_HTTPS` | `false` | Use HTTPS for staged payloads |
+| `BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS` | `3` | Max wordlist iterations for brute force |
+| `INFORMATIONAL_SYSTEM_PROMPT` | `""` | Custom system prompt injected during informational phase |
+| `EXPL_SYSTEM_PROMPT` | `""` | Custom system prompt injected during exploitation phase |
+| `POST_EXPL_SYSTEM_PROMPT` | `""` | Custom system prompt injected during post-exploitation phase |
+| `CYPHER_MAX_RETRIES` | `3` | Neo4j text-to-Cypher retry limit |
+| `CREATE_GRAPH_IMAGE_ON_INIT` | `false` | Export LangGraph structure as PNG on startup |
 
 ### Environment Variables
 
@@ -1060,8 +1277,8 @@ flowchart TB
 | `NEO4J_URI` | Yes | Neo4j connection URI |
 | `NEO4J_USER` | Yes | Neo4j username |
 | `NEO4J_PASSWORD` | Yes | Neo4j password |
-| `LHOST` | For statefull | Attacker IP for reverse shells |
-| `LPORT` | For statefull | Attacker port for reverse shells |
+| `PROJECT_ID` | For DB settings | Project ID to fetch settings for |
+| `WEBAPP_API_URL` | For DB settings | Webapp base URL (e.g., `http://localhost:3000`) |
 
 ---
 
@@ -1117,8 +1334,11 @@ The RedAmon Agentic System provides:
 
 1. **Autonomous Reasoning** - LangGraph-based ReAct pattern for intelligent decision making
 2. **Phase-Based Security** - Controlled progression through informational → exploitation → post-exploitation
-3. **Human Oversight** - Approval workflows for risky phase transitions
-4. **Real-Time Feedback** - WebSocket streaming for live UI updates
-5. **Multi-Tenancy** - Isolated sessions with tenant-filtered data access
-6. **Stateful Exploitation** - Persistent Metasploit sessions for complex attacks
-7. **Multi-Objective Support** - Continuous conversations with context preservation
+3. **Attack Path Classification** - LLM-based classification of objectives into CVE exploit or brute force paths, with dynamic tool routing
+4. **Human Oversight** - Approval workflows for risky phase transitions and pre-exploitation validation
+5. **Real-Time Feedback** - WebSocket streaming with progress chunks for long-running commands
+6. **Multi-Tenancy** - Isolated sessions with tenant-filtered data access
+7. **Stateful Exploitation** - Persistent Metasploit sessions with auto-reset and session/credential detection
+8. **Multi-Objective Support** - Continuous conversations with context preservation and per-objective attack path classification
+9. **Database-Driven Configuration** - All settings fetched from PostgreSQL via webapp API, with standalone defaults fallback
+10. **Custom Phase Prompts** - Per-phase system prompt injection for project-specific agent behavior

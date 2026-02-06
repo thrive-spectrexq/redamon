@@ -136,7 +136,7 @@
 
 .itemDomain {
   font-size: 10px;
-  color: var(--text-tertiary);
+  color: var(--accent-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -5,6 +5,7 @@ MCP tools and Neo4j graph query tool definitions.
 Includes phase-aware tool management.
 """
 
+import os
 import re
 import json
 import asyncio
@@ -17,14 +18,7 @@ from langchain_core.tools import tool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_neo4j import Neo4jGraph
 
-from params import (
-    MCP_CURL_URL,
-    MCP_NAABU_URL,
-    MCP_METASPLOIT_URL,
-    MCP_METASPLOIT_PROGRESS_URL,
-    CYPHER_MAX_RETRIES,
-    is_tool_allowed_in_phase,
-)
+from project_settings import get_setting, is_tool_allowed_in_phase
 from prompts import TEXT_TO_CYPHER_SYSTEM
 
 if TYPE_CHECKING:
@@ -67,13 +61,13 @@ class MCPToolsManager:
 
     def __init__(
         self,
-        curl_url: str = MCP_CURL_URL,
-        naabu_url: str = MCP_NAABU_URL,
-        metasploit_url: str = MCP_METASPLOIT_URL,
+        curl_url: str = None,
+        naabu_url: str = None,
+        metasploit_url: str = None,
     ):
-        self.curl_url = curl_url
-        self.naabu_url = naabu_url
-        self.metasploit_url = metasploit_url
+        self.curl_url = curl_url or os.environ.get('MCP_CURL_URL', 'http://host.docker.internal:8001/sse')
+        self.naabu_url = naabu_url or os.environ.get('MCP_NAABU_URL', 'http://host.docker.internal:8000/sse')
+        self.metasploit_url = metasploit_url or os.environ.get('MCP_METASPLOIT_URL', 'http://host.docker.internal:8003/sse')
         self.client: Optional[MultiServerMCPClient] = None
         self._tools_cache: Dict[str, any] = {}
 
@@ -331,13 +325,13 @@ Cypher Query:"""
                 last_error = None
                 last_cypher = None
 
-                for attempt in range(CYPHER_MAX_RETRIES):
+                for attempt in range(get_setting('CYPHER_MAX_RETRIES', 3)):
                     try:
                         # Step 1: Generate Cypher from natural language (with error context on retry)
                         if attempt == 0:
                             cypher = await manager._generate_cypher(question)
                         else:
-                            logger.info(f"[{user_id}/{project_id}] Retry {attempt}/{CYPHER_MAX_RETRIES - 1}: Regenerating Cypher...")
+                            logger.info(f"[{user_id}/{project_id}] Retry {attempt}/{get_setting('CYPHER_MAX_RETRIES', 3) - 1}: Regenerating Cypher...")
                             cypher = await manager._generate_cypher(
                                 question,
                                 previous_error=last_error,
@@ -371,9 +365,9 @@ Cypher Query:"""
                         last_cypher = cypher if 'cypher' in locals() else None
 
                         # If this is the last attempt, return the error
-                        if attempt == CYPHER_MAX_RETRIES - 1:
-                            logger.error(f"[{user_id}/{project_id}] All {CYPHER_MAX_RETRIES} attempts failed")
-                            return f"Error querying graph after {CYPHER_MAX_RETRIES} attempts: {error_msg}"
+                        if attempt == get_setting('CYPHER_MAX_RETRIES', 3) - 1:
+                            logger.error(f"[{user_id}/{project_id}] All {get_setting('CYPHER_MAX_RETRIES', 3)} attempts failed")
+                            return f"Error querying graph after {get_setting('CYPHER_MAX_RETRIES', 3)} attempts: {error_msg}"
 
                 return "Error: Unexpected end of retry loop"
 
@@ -559,7 +553,7 @@ class PhaseAwareToolExecutor:
                     break
 
                 try:
-                    resp = await client.get(MCP_METASPLOIT_PROGRESS_URL)
+                    resp = await client.get(os.environ.get('MCP_METASPLOIT_PROGRESS_URL', 'http://host.docker.internal:8013/progress'))
                     if resp.status_code == 200:
                         progress = resp.json()
 
@@ -615,8 +609,7 @@ class PhaseAwareToolExecutor:
 
 def get_phase_for_tool(tool_name: str) -> str:
     """Get the minimum phase required for a tool."""
-    from params import TOOL_PHASE_MAP
-    allowed_phases = TOOL_PHASE_MAP.get(tool_name, [])
+    allowed_phases = get_setting('TOOL_PHASE_MAP', {}).get(tool_name, [])
     if "informational" in allowed_phases:
         return "informational"
     elif "exploitation" in allowed_phases:

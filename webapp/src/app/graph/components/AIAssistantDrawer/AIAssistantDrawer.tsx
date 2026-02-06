@@ -50,6 +50,7 @@ interface AIAssistantDrawerProps {
   projectId: string
   sessionId: string
   onResetSession?: () => void
+  modelName?: string
 }
 
 const PHASE_CONFIG = {
@@ -97,6 +98,7 @@ export function AIAssistantDrawer({
   projectId,
   sessionId,
   onResetSession,
+  modelName,
 }: AIAssistantDrawerProps) {
   const [chatItems, setChatItems] = useState<ChatItem[]>([])
   const [inputValue, setInputValue] = useState('')
@@ -708,6 +710,10 @@ export function AIAssistantDrawer({
         {iterationCount > 0 && (
           <span className={styles.iterationCount}>Step {iterationCount}</span>
         )}
+
+        {modelName && (
+          <span className={styles.modelBadge}>{modelName}</span>
+        )}
       </div>
 
       {/* Todo List Widget */}
@@ -956,7 +962,7 @@ export function AIAssistantDrawer({
             disabled={!inputValue.trim() || isLoading || awaitingApproval || awaitingQuestion || !isConnected}
             aria-label="Send message"
           >
-            {isLoading ? <Loader2 size={16} className={styles.spinner} /> : <Send size={16} />}
+            {isLoading ? <Loader2 size={13} className={styles.spinner} /> : <Send size={13} />}
           </button>
         </div>
         <span className={styles.inputHint}>

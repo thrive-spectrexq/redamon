@@ -297,6 +297,57 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     'SECURITY_CHECK_NO_RATE_LIMITING': True,
     'SECURITY_CHECK_TIMEOUT': 10,
     'SECURITY_CHECK_MAX_WORKERS': 10,
+
+    # =============================================================================
+    # AGENT BEHAVIOUR
+    # =============================================================================
+
+    # LLM Configuration
+    'AGENT_OPENAI_MODEL': 'gpt-5.2',
+    'AGENT_INFORMATIONAL_SYSTEM_PROMPT': '',
+    'AGENT_EXPL_SYSTEM_PROMPT': '',
+    'AGENT_POST_EXPL_SYSTEM_PROMPT': '',
+
+    # Phase Configuration
+    'AGENT_ACTIVATE_POST_EXPL_PHASE': True,
+    'AGENT_POST_EXPL_PHASE_TYPE': 'statefull',
+
+    # Payload Direction
+    'AGENT_LHOST': '',
+    'AGENT_LPORT': None,
+    'AGENT_BIND_PORT_ON_TARGET': 4444,
+    'AGENT_PAYLOAD_USE_HTTPS': False,
+
+    # Agent Limits
+    'AGENT_MAX_ITERATIONS': 100,
+    'AGENT_EXECUTION_TRACE_MEMORY_STEPS': 100,
+    'AGENT_TOOL_OUTPUT_MAX_CHARS': 8000,
+
+    # Approval Gates
+    'AGENT_REQUIRE_APPROVAL_FOR_EXPLOITATION': True,
+    'AGENT_REQUIRE_APPROVAL_FOR_POST_EXPLOITATION': True,
+
+    # Neo4j
+    'AGENT_CYPHER_MAX_RETRIES': 3,
+
+    # Debug
+    'AGENT_CREATE_GRAPH_IMAGE_ON_INIT': False,
+
+    # Logging
+    'AGENT_LOG_MAX_MB': 10,
+    'AGENT_LOG_BACKUP_COUNT': 5,
+
+    # Tool Phase Restrictions
+    'AGENT_TOOL_PHASE_MAP': {
+        'query_graph': ['informational', 'exploitation', 'post_exploitation'],
+        'execute_curl': ['informational', 'exploitation', 'post_exploitation'],
+        'execute_naabu': ['informational', 'exploitation', 'post_exploitation'],
+        'metasploit_console': ['exploitation', 'post_exploitation'],
+        'msf_restart': ['exploitation', 'post_exploitation'],
+    },
+
+    # Brute Force
+    'AGENT_BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS': 3,
 }
 
 
@@ -550,6 +601,29 @@ def fetch_project_settings(project_id: str, webapp_url: str) -> dict[str, Any]:
     settings['SECURITY_CHECK_NO_RATE_LIMITING'] = project.get('securityCheckNoRateLimiting', DEFAULT_SETTINGS['SECURITY_CHECK_NO_RATE_LIMITING'])
     settings['SECURITY_CHECK_TIMEOUT'] = project.get('securityCheckTimeout', DEFAULT_SETTINGS['SECURITY_CHECK_TIMEOUT'])
     settings['SECURITY_CHECK_MAX_WORKERS'] = project.get('securityCheckMaxWorkers', DEFAULT_SETTINGS['SECURITY_CHECK_MAX_WORKERS'])
+
+    # Agent Behaviour
+    settings['AGENT_OPENAI_MODEL'] = project.get('agentOpenaiModel', DEFAULT_SETTINGS['AGENT_OPENAI_MODEL'])
+    settings['AGENT_INFORMATIONAL_SYSTEM_PROMPT'] = project.get('agentInformationalSystemPrompt', DEFAULT_SETTINGS['AGENT_INFORMATIONAL_SYSTEM_PROMPT'])
+    settings['AGENT_EXPL_SYSTEM_PROMPT'] = project.get('agentExplSystemPrompt', DEFAULT_SETTINGS['AGENT_EXPL_SYSTEM_PROMPT'])
+    settings['AGENT_POST_EXPL_SYSTEM_PROMPT'] = project.get('agentPostExplSystemPrompt', DEFAULT_SETTINGS['AGENT_POST_EXPL_SYSTEM_PROMPT'])
+    settings['AGENT_ACTIVATE_POST_EXPL_PHASE'] = project.get('agentActivatePostExplPhase', DEFAULT_SETTINGS['AGENT_ACTIVATE_POST_EXPL_PHASE'])
+    settings['AGENT_POST_EXPL_PHASE_TYPE'] = project.get('agentPostExplPhaseType', DEFAULT_SETTINGS['AGENT_POST_EXPL_PHASE_TYPE'])
+    settings['AGENT_LHOST'] = project.get('agentLhost', DEFAULT_SETTINGS['AGENT_LHOST'])
+    settings['AGENT_LPORT'] = project.get('agentLport', DEFAULT_SETTINGS['AGENT_LPORT'])
+    settings['AGENT_BIND_PORT_ON_TARGET'] = project.get('agentBindPortOnTarget', DEFAULT_SETTINGS['AGENT_BIND_PORT_ON_TARGET'])
+    settings['AGENT_PAYLOAD_USE_HTTPS'] = project.get('agentPayloadUseHttps', DEFAULT_SETTINGS['AGENT_PAYLOAD_USE_HTTPS'])
+    settings['AGENT_MAX_ITERATIONS'] = project.get('agentMaxIterations', DEFAULT_SETTINGS['AGENT_MAX_ITERATIONS'])
+    settings['AGENT_EXECUTION_TRACE_MEMORY_STEPS'] = project.get('agentExecutionTraceMemorySteps', DEFAULT_SETTINGS['AGENT_EXECUTION_TRACE_MEMORY_STEPS'])
+    settings['AGENT_REQUIRE_APPROVAL_FOR_EXPLOITATION'] = project.get('agentRequireApprovalForExploitation', DEFAULT_SETTINGS['AGENT_REQUIRE_APPROVAL_FOR_EXPLOITATION'])
+    settings['AGENT_REQUIRE_APPROVAL_FOR_POST_EXPLOITATION'] = project.get('agentRequireApprovalForPostExploitation', DEFAULT_SETTINGS['AGENT_REQUIRE_APPROVAL_FOR_POST_EXPLOITATION'])
+    settings['AGENT_TOOL_OUTPUT_MAX_CHARS'] = project.get('agentToolOutputMaxChars', DEFAULT_SETTINGS['AGENT_TOOL_OUTPUT_MAX_CHARS'])
+    settings['AGENT_CYPHER_MAX_RETRIES'] = project.get('agentCypherMaxRetries', DEFAULT_SETTINGS['AGENT_CYPHER_MAX_RETRIES'])
+    settings['AGENT_CREATE_GRAPH_IMAGE_ON_INIT'] = project.get('agentCreateGraphImageOnInit', DEFAULT_SETTINGS['AGENT_CREATE_GRAPH_IMAGE_ON_INIT'])
+    settings['AGENT_LOG_MAX_MB'] = project.get('agentLogMaxMb', DEFAULT_SETTINGS['AGENT_LOG_MAX_MB'])
+    settings['AGENT_LOG_BACKUP_COUNT'] = project.get('agentLogBackupCount', DEFAULT_SETTINGS['AGENT_LOG_BACKUP_COUNT'])
+    settings['AGENT_TOOL_PHASE_MAP'] = project.get('agentToolPhaseMap', DEFAULT_SETTINGS['AGENT_TOOL_PHASE_MAP'])
+    settings['AGENT_BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS'] = project.get('agentBruteForceMaxWordlistAttempts', DEFAULT_SETTINGS['AGENT_BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS'])
 
     logger.info(f"Loaded {len(settings)} settings for project {project_id}")
     return settings

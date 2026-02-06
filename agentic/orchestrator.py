@@ -36,16 +36,7 @@ from state import (
     summarize_trace_for_response,
     utc_now,
 )
-from params import (
-    OPENAI_MODEL,
-    CREATE_GRAPH_IMAGRE_ON_INIT,
-    MAX_ITERATIONS,
-    REQUIRE_APPROVAL_FOR_EXPLOITATION,
-    REQUIRE_APPROVAL_FOR_POST_EXPLOITATION,
-    TOOL_OUTPUT_MAX_CHARS,
-    ACTIVATE_POST_EXPL_PHASE,
-    POST_EXPL_PHASE_TYPE,
-)
+from project_settings import get_setting
 from tools import (
     MCPToolsManager,
     Neo4jToolManager,
@@ -98,7 +89,7 @@ class AgentOrchestrator:
 
     def __init__(self):
         """Initialize the orchestrator with configuration."""
-        self.model_name = OPENAI_MODEL
+        self.model_name = get_setting('OPENAI_MODEL', 'gpt-5.2')
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
         self.neo4j_user = os.getenv("NEO4J_USER", "neo4j")
@@ -124,7 +115,7 @@ class AgentOrchestrator:
         self._build_graph()
         self._initialized = True
 
-        if CREATE_GRAPH_IMAGRE_ON_INIT:
+        if get_setting('CREATE_GRAPH_IMAGE_ON_INIT', False):
             save_graph_image(self.graph)
 
         logger.info("AgentOrchestrator initialized with ReAct pattern")
@@ -388,7 +379,7 @@ class AgentOrchestrator:
         logger.info(f"[{user_id}/{project_id}/{session_id}] Continuing with current objective")
         return {
             "current_iteration": state.get("current_iteration", 0),
-            "max_iterations": state.get("max_iterations", MAX_ITERATIONS),
+            "max_iterations": state.get("max_iterations", get_setting('MAX_ITERATIONS', 100)),
             "task_complete": False,
             "current_phase": state.get("current_phase", "informational"),
             "attack_path_type": state.get("attack_path_type", "cve_exploit"),
@@ -455,14 +446,14 @@ class AgentOrchestrator:
 
         # Get phase tools with attack path type for dynamic routing
         attack_path_type = state.get("attack_path_type", "cve_exploit")
-        available_tools = get_phase_tools(phase, ACTIVATE_POST_EXPL_PHASE, POST_EXPL_PHASE_TYPE, attack_path_type)
+        available_tools = get_phase_tools(phase, get_setting('ACTIVATE_POST_EXPL_PHASE', True), get_setting('POST_EXPL_PHASE_TYPE', 'statefull'), attack_path_type)
 
         system_prompt = REACT_SYSTEM_PROMPT.format(
             current_phase=phase,
             attack_path_type=attack_path_type,
             available_tools=available_tools,
             iteration=iteration,
-            max_iterations=state.get("max_iterations", MAX_ITERATIONS),
+            max_iterations=state.get("max_iterations", get_setting('MAX_ITERATIONS', 100)),
             objective=current_objective,  # Now uses current objective, not original
             objective_history_summary=objective_history_formatted,  # Added
             execution_trace=execution_trace_formatted,
@@ -591,14 +582,14 @@ class AgentOrchestrator:
             to_phase = phase_transition.to_phase if phase_transition else "exploitation"
 
             # Block post-exploitation if ACTIVATE_POST_EXPL_PHASE=False
-            if to_phase == "post_exploitation" and not ACTIVATE_POST_EXPL_PHASE:
+            if to_phase == "post_exploitation" and not get_setting('ACTIVATE_POST_EXPL_PHASE', True):
                 logger.warning(f"[{user_id}/{project_id}/{session_id}] Blocking post_exploitation transition: ACTIVATE_POST_EXPL_PHASE=False")
                 updates["task_complete"] = True
                 updates["completion_reason"] = "Exploitation completed. Post-exploitation phase is disabled."
                 updates["messages"] = [
                     AIMessage(content="Exploitation completed successfully. "
                                      "Post-exploitation phase is not available because ACTIVATE_POST_EXPL_PHASE=False. "
-                                     "If you need post-exploitation capabilities, set ACTIVATE_POST_EXPL_PHASE=True in params.py.")
+                                     "If you need post-exploitation capabilities, enable it in the project settings.")
                 ]
                 return updates
 
@@ -645,8 +636,8 @@ class AgentOrchestrator:
 
             # Check if approval is required (for exploitation/post-exploitation upgrades)
             needs_approval = (
-                (to_phase == "exploitation" and REQUIRE_APPROVAL_FOR_EXPLOITATION) or
-                (to_phase == "post_exploitation" and REQUIRE_APPROVAL_FOR_POST_EXPLOITATION)
+                (to_phase == "exploitation" and get_setting('REQUIRE_APPROVAL_FOR_EXPLOITATION', True)) or
+                (to_phase == "post_exploitation" and get_setting('REQUIRE_APPROVAL_FOR_POST_EXPLOITATION', True))
             )
 
             if needs_approval:
@@ -685,7 +676,7 @@ class AgentOrchestrator:
         # Pre-exploitation validation: Force ask_user when session params are missing
         # This only applies to CVE exploits in statefull mode that need reverse/bind payloads
         # Brute force attacks don't need LHOST/LPORT - SSH creates direct shell via CreateSession=true
-        if (POST_EXPL_PHASE_TYPE == "statefull" and
+        if (get_setting('POST_EXPL_PHASE_TYPE', 'statefull') == "statefull" and
             state.get("attack_path_type") == "cve_exploit" and
             decision.action == "use_tool" and
             decision.tool_name == "metasploit_console" and
@@ -860,7 +851,7 @@ class AgentOrchestrator:
         analysis_prompt = OUTPUT_ANALYSIS_PROMPT.format(
             tool_name=tool_name,
             tool_args=json_dumps_safe(step_data.get("tool_args") or {}),
-            tool_output=tool_output[:TOOL_OUTPUT_MAX_CHARS] if tool_output else "No output",
+            tool_output=tool_output[:get_setting('TOOL_OUTPUT_MAX_CHARS', 8000)] if tool_output else "No output",
             current_target_info=json_dumps_safe(state.get("target_info") or {}, indent=2),
         )
 
@@ -935,7 +926,7 @@ class AgentOrchestrator:
             tool_output,
             phase,
             state.get("attack_path_type", "cve_exploit"),
-            POST_EXPL_PHASE_TYPE,
+            get_setting('POST_EXPL_PHASE_TYPE', 'statefull'),
             user_id, project_id, session_id
         )
 
@@ -1170,7 +1161,7 @@ class AgentOrchestrator:
     def _route_after_think(self, state: AgentState) -> str:
         """Route based on think node decision."""
         # Check for max iterations
-        if state.get("current_iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
+        if state.get("current_iteration", 0) >= state.get("max_iterations", get_setting('MAX_ITERATIONS', 100)):
             logger.info("Max iterations reached, generating response")
             return "generate_response"
 
@@ -1223,7 +1214,7 @@ class AgentOrchestrator:
         if state.get("task_complete"):
             return "generate_response"
 
-        if state.get("current_iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
+        if state.get("current_iteration", 0) >= state.get("max_iterations", get_setting('MAX_ITERATIONS', 100)):
             return "generate_response"
 
         return "think"

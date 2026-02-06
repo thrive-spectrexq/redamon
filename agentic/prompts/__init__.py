@@ -54,12 +54,7 @@ PAYLOAD_GUIDANCE_STATELESS = CVE_PAYLOAD_GUIDANCE_STATELESS
 
 # Import utilities
 from utils import get_session_config_prompt
-from params import (
-    INFORMATIONAL_SYSTEM_PROMPT,
-    EXPL_SYSTEM_PROMPT,
-    POST_EXPL_SYSTEM_PROMPT,
-    BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS,
-)
+from project_settings import get_setting
 
 
 def get_phase_tools(
@@ -84,12 +79,16 @@ def get_phase_tools(
     is_statefull = post_expl_type == "statefull"
 
     # Add phase-specific custom system prompt if configured
-    if phase == "informational" and INFORMATIONAL_SYSTEM_PROMPT:
-        parts.append(f"## Custom Instructions\n\n{INFORMATIONAL_SYSTEM_PROMPT}\n")
-    elif phase == "exploitation" and EXPL_SYSTEM_PROMPT:
-        parts.append(f"## Custom Instructions\n\n{EXPL_SYSTEM_PROMPT}\n")
-    elif phase == "post_exploitation" and POST_EXPL_SYSTEM_PROMPT:
-        parts.append(f"## Custom Instructions\n\n{POST_EXPL_SYSTEM_PROMPT}\n")
+    informational_prompt = get_setting('INFORMATIONAL_SYSTEM_PROMPT', '')
+    expl_prompt = get_setting('EXPL_SYSTEM_PROMPT', '')
+    post_expl_prompt = get_setting('POST_EXPL_SYSTEM_PROMPT', '')
+
+    if phase == "informational" and informational_prompt:
+        parts.append(f"## Custom Instructions\n\n{informational_prompt}\n")
+    elif phase == "exploitation" and expl_prompt:
+        parts.append(f"## Custom Instructions\n\n{expl_prompt}\n")
+    elif phase == "post_exploitation" and post_expl_prompt:
+        parts.append(f"## Custom Instructions\n\n{post_expl_prompt}\n")
 
     # Determine allowed tools for current phase
     if phase == "informational":
@@ -125,7 +124,7 @@ def get_phase_tools(
         if attack_path_type == "brute_force_credential_guess":
             # Format with max attempts from params
             parts.append(BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS.format(
-                brute_force_max_attempts=BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS
+                brute_force_max_attempts=get_setting('BRUTE_FORCE_MAX_WORDLIST_ATTEMPTS', 3)
             ))
             # Add wordlist reference guide
             parts.append(BRUTE_FORCE_CREDENTIAL_GUESS_WORDLIST_GUIDANCE)

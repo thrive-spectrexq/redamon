@@ -9,6 +9,7 @@ export interface ProjectSummary {
   targetDomain: string
   subdomainList?: string[]
   description?: string
+  agentOpenaiModel?: string
   createdAt: string
   updatedAt: string
 }
@@ -59,6 +60,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               targetDomain: project.targetDomain,
               subdomainList: project.subdomainList,
               description: project.description,
+              agentOpenaiModel: project.agentOpenaiModel,
               createdAt: project.createdAt,
               updatedAt: project.updatedAt
             })

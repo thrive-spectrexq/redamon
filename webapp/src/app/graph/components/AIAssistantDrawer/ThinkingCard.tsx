@@ -101,8 +101,8 @@ export function ThinkingCard({ item, isExpanded, onToggleExpand }: ThinkingCardP
             </div>
           )}
 
-          {/* Action */}
-          {item.action && (
+          {/* Action (skip redundant "thinking" label) */}
+          {item.action && item.action !== 'thinking' && (
             <div className={styles.section}>
               <div className={styles.sectionLabel}>Action</div>
               <div className={styles.sectionContent}>

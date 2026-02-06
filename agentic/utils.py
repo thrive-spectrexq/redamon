@@ -5,12 +5,7 @@ Utility functions for API and prompts that are not orchestrator-specific.
 Orchestrator-specific helpers are in orchestrator_helpers/.
 """
 
-from params import (
-    LHOST,
-    LPORT,
-    BIND_PORT_ON_TARGET,
-    PAYLOAD_USE_HTTPS,
-)
+from project_settings import get_setting
 from orchestrator_helpers import get_checkpointer
 
 
@@ -37,6 +32,12 @@ def get_session_config_prompt() -> str:
     Returns:
         Formatted string with Metasploit commands for the agent.
     """
+    # Fetch settings: empty string / None = "not set"
+    LHOST = get_setting('LHOST', '') or None
+    LPORT = get_setting('LPORT')
+    BIND_PORT_ON_TARGET = get_setting('BIND_PORT_ON_TARGET', 4444)
+    PAYLOAD_USE_HTTPS = get_setting('PAYLOAD_USE_HTTPS', False)
+
     # -------------------------------------------------------------------------
     # CHECK FOR MISSING PARAMETERS
     # -------------------------------------------------------------------------
@@ -168,7 +169,7 @@ def get_session_config_prompt() -> str:
         # =====================================================================
         lines.append("❌ **NO PAYLOAD MODE CONFIGURED**")
         lines.append("")
-        lines.append("Neither LPORT nor BIND_PORT_ON_TARGET is set in params.py.")
+        lines.append("Neither LPORT nor BIND_PORT_ON_TARGET is set in project settings.")
         lines.append("")
         lines.append("**Ask the user which mode to use:**")
         lines.append("")

@@ -31,11 +31,19 @@ CPE_MAPPINGS = {
     "tomcat": ("apache", "tomcat"),
     "lighttpd": ("lighttpd", "lighttpd"),
     "caddy": ("caddyserver", "caddy"),
+    "litespeed": ("litespeedtech", "litespeed_web_server"),
+    "cherokee": ("cherokee-project", "cherokee"),
+    "gunicorn": ("gunicorn", "gunicorn"),
+    "uvicorn": ("encode", "uvicorn"),
+    "traefik": ("traefik", "traefik"),
+    "envoy": ("envoyproxy", "envoy"),
     # Languages/Runtimes
     "php": ("php", "php"),
     "python": ("python", "python"),
     "node.js": ("nodejs", "node.js"),
     "ruby": ("ruby-lang", "ruby"),
+    "perl": ("perl", "perl"),
+    "go": ("golang", "go"),
     # Databases
     "mysql": ("oracle", "mysql"),
     "mariadb": ("mariadb", "mariadb"),
@@ -43,6 +51,8 @@ CPE_MAPPINGS = {
     "mongodb": ("mongodb", "mongodb"),
     "redis": ("redis", "redis"),
     "elasticsearch": ("elastic", "elasticsearch"),
+    "couchdb": ("apache", "couchdb"),
+    "memcached": ("memcached", "memcached"),
     # CMS/Frameworks
     "wordpress": ("wordpress", "wordpress"),
     "drupal": ("drupal", "drupal"),
@@ -50,21 +60,50 @@ CPE_MAPPINGS = {
     "django": ("djangoproject", "django"),
     "laravel": ("laravel", "laravel"),
     "spring": ("vmware", "spring_framework"),
+    "flask": ("palletsprojects", "flask"),
+    "express": ("expressjs", "express"),
+    "rails": ("rubyonrails", "rails"),
     # JavaScript
     "jquery": ("jquery", "jquery"),
     "angular": ("angular", "angular"),
     "react": ("facebook", "react"),
     "vue": ("vuejs", "vue.js"),
     "bootstrap": ("getbootstrap", "bootstrap"),
-    # Security
+    "next.js": ("vercel", "next.js"),
+    # Mail Servers
+    "postfix": ("postfix", "postfix"),
+    "exim": ("exim", "exim"),
+    "dovecot": ("dovecot", "dovecot"),
+    # DNS
+    "bind": ("isc", "bind"),
+    # FTP
+    "proftpd": ("proftpd", "proftpd"),
+    "vsftpd": ("vsftpd_project", "vsftpd"),
+    "pureftpd": ("pureftpd", "pure-ftpd"),
+    # Security / Proxies
     "openssh": ("openbsd", "openssh"),
     "openssl": ("openssl", "openssl"),
-    # Other
+    "squid": ("squid-cache", "squid"),
+    "haproxy": ("haproxy", "haproxy"),
     "varnish": ("varnish-software", "varnish_cache"),
+    # CI/CD & DevOps
     "grafana": ("grafana", "grafana"),
     "jenkins": ("jenkins", "jenkins"),
     "gitlab": ("gitlab", "gitlab"),
-    "haproxy": ("haproxy", "haproxy"),
+    "sonarqube": ("sonarsource", "sonarqube"),
+    "nexus": ("sonatype", "nexus_repository_manager"),
+    "rabbitmq": ("vmware", "rabbitmq"),
+    "kafka": ("apache", "kafka"),
+    "zookeeper": ("apache", "zookeeper"),
+    # Java Application Servers
+    "jetty": ("eclipse", "jetty"),
+    "wildfly": ("redhat", "wildfly"),
+    "passenger": ("phusion", "passenger"),
+    # Other
+    "phpmyadmin": ("phpmyadmin", "phpmyadmin"),
+    "webmin": ("webmin", "webmin"),
+    "roundcube": ("roundcube", "webmail"),
+    "minio": ("minio", "minio"),
 }
 
 
@@ -72,17 +111,184 @@ CPE_MAPPINGS = {
 # Technology Parsing Utilities
 # =============================================================================
 
+def _extract_semver(version: str) -> Optional[str]:
+    """
+    Extract the semantic version from a version string,
+    stripping distro suffixes, patch identifiers, etc.
+
+    Examples:
+        "8.1.2-1ubuntu2.14" → "8.1.2"
+        "2.4.49"            → "2.4.49"
+        "1.19.0p1"          → "1.19.0"
+        "9.0.65"            → "9.0.65"
+        "8.9p1"             → "8.9"
+        "10"                → "10"
+        "v5.22.1"           → "5.22.1"
+        ""                  → None
+    """
+    if not version:
+        return None
+    # Strip leading 'v' prefix (e.g., "v5.22.1" → "5.22.1")
+    version = re.sub(r'^[vV]', '', version)
+    # Try multi-part version first (x.y or x.y.z)
+    match = re.match(r'(\d+(?:\.\d+)+)', version)
+    if match:
+        return match.group(1)
+    # Fall back to single major version (e.g. "10" from "IIS/10")
+    match = re.match(r'(\d+)', version)
+    return match.group(1) if match else None
+
+
+def split_server_header(header: str) -> List[str]:
+    """
+    Split a compound HTTP Server header into individual product tokens.
+
+    Server headers can contain multiple products separated by spaces, but
+    multi-word names like "Apache Tomcat" complicate naive splitting.
+
+    Strategy: use regex to find all "Name/Version" or "Name_Version" tokens,
+    then also catch standalone "(qualifier)" groups and skip them.
+
+    Examples:
+        "Apache/2.4.49 (Unix) OpenSSL/1.1.1l PHP/8.1.2-1ubuntu2.14"
+            → ["Apache/2.4.49", "OpenSSL/1.1.1l", "PHP/8.1.2-1ubuntu2.14"]
+
+        "Apache/2.4.49 (Unix)"
+            → ["Apache/2.4.49"]
+
+        "nginx/1.18.0 (Ubuntu)"
+            → ["nginx/1.18.0"]
+
+        "Apache Tomcat/9.0.65"
+            → ["Apache Tomcat/9.0.65"]
+
+        "OpenSSH_8.9p1 Ubuntu-3ubuntu0.4"
+            → ["OpenSSH_8.9p1"]
+
+        "Nginx:1.19.0"
+            → ["Nginx:1.19.0"]
+
+        "jQuery"
+            → ["jQuery"]
+    """
+    if not header or not header.strip():
+        return []
+
+    # Also match underscore-joined tokens like "OpenSSH_8.9p1"
+    # but NOT "mod_wsgi/4.6.8" (has slash, so handled by slash_pattern)
+    underscore_pattern = re.compile(
+        r'([A-Za-z][A-Za-z0-9-]*_\d[\w.]*)'
+    )
+
+    products = []
+    remaining = header.strip()
+
+    # First extract underscore-joined tokens WITHOUT a slash/colon after them
+    for m in underscore_pattern.finditer(remaining):
+        token = m.group(1)
+        end_pos = m.end()
+        # Skip if this token is followed by / or : (it's part of a slash-product)
+        if end_pos < len(remaining) and remaining[end_pos] in '/:':
+            continue
+        products.append(token)
+
+    if products:
+        # Remove extracted tokens from remaining
+        for p in products:
+            remaining = remaining.replace(p, ' ')
+
+    # Now find slash/colon-delimited products in the remaining string
+    # Match: "Name/version" or "Multi-Word_Name/version"
+    # Name can contain letters, digits, spaces, hyphens, underscores
+    # Version can optionally start with 'v' prefix (e.g., "Perl/v5.22.1")
+    slash_pattern = re.compile(
+        r'([A-Za-z][A-Za-z0-9 _-]*?)\s*[/:]\s*(v?\d[\w._-]*)'
+    )
+    for m in slash_pattern.finditer(remaining):
+        full = m.group(0).strip()
+        products.append(full)
+
+    # If nothing was found with delimiters, return the original string as-is
+    if not products:
+        return [header.strip()]
+
+    return products
+
+
 def parse_technology_string(tech: str) -> Tuple[str, Optional[str]]:
-    """Parse technology string like 'Nginx:1.19.0' into (name, version)."""
+    """
+    Parse a SINGLE technology string into (name, version).
+
+    For compound server headers with multiple products (e.g.,
+    "Apache/2.4.49 (Unix) OpenSSL/1.1.1l"), use split_server_header()
+    first to split into individual tokens, then parse each one.
+
+    Handles formats:
+        "Nginx:1.19.0"                          → ("nginx", "1.19.0")
+        "Apache/2.4.49 (Unix)"                  → ("apache", "2.4.49")
+        "PHP/8.1.2-1ubuntu2.14"                 → ("php", "8.1.2")
+        "OpenSSH_8.9p1 Ubuntu-3ubuntu0.4"       → ("openssh", "8.9")
+        "Apache Tomcat/9.0.65"                  → ("apache tomcat", "9.0.65")
+        "jQuery"                                → ("jquery", None)
+        "Microsoft-IIS/10.0"                    → ("microsoft-iis", "10.0")
+        "mini_httpd/1.30"                       → ("mini_httpd", "1.30")
+    """
     tech = tech.strip()
-    for delimiter in [':', '/', ' ']:
+    if not tech:
+        return "", None
+
+    # Skip strings that are just a bare version number (no product name)
+    if re.match(r'^\d+[\d.]*$', tech):
+        return "", None
+
+    # Handle parenthesized version (e.g., "Jetty(9.4.44.v20210927)")
+    paren_match = re.match(r'^([A-Za-z][A-Za-z0-9 _-]*?)\((.+?)\)$', tech)
+    if paren_match:
+        name = paren_match.group(1).strip().lower()
+        version = _extract_semver(paren_match.group(2))
+        return name, version
+
+    # Handle underscore-joined name_version (e.g., "OpenSSH_8.9p1 Ubuntu-3")
+    # But NOT "name_name/version" patterns like "mini_httpd/1.30"
+    underscore_match = re.match(r'^([A-Za-z][A-Za-z0-9-]*)_(\d[\w.]*)', tech)
+    if underscore_match and '/' not in tech and ':' not in tech:
+        name = underscore_match.group(1).lower()
+        version = _extract_semver(underscore_match.group(2))
+        return name, version
+
+    # Prefer colon and slash over space — they are explicit version delimiters.
+    # Colon: Wappalyzer format "Name:version" — split on first occurrence
+    # Slash: Server header format "Name/version" — split on first occurrence
+    #   This correctly handles "Apache/2.4.49 (Unix) OpenSSL/1.1.1l" → ("apache", "2.4.49")
+    #   For multi-word names like "Apache Tomcat/9.0.65", first split gives the right result too
+    for delimiter in [':', '/']:
         if delimiter in tech:
             parts = tech.split(delimiter, 1)
             name = parts[0].strip().lower()
-            version = parts[1].strip() if len(parts) > 1 else None
-            if version:
-                version = re.sub(r'^v', '', version)
+            raw_version = parts[1].strip() if len(parts) > 1 else None
+            if raw_version:
+                # Remove everything from the first space onward
+                # (handles "2.4.49 (Unix) OpenSSL/1.1.1l" → "2.4.49")
+                raw_version = raw_version.split()[0]
+            version = _extract_semver(raw_version) if raw_version else None
+            # If what we extracted as "version" doesn't look numeric, it's not a real version
+            # Return just the name part (e.g., "MinIO/RELEASE.2023..." → "minio", None)
+            if version is None and raw_version and not re.match(r'\d', raw_version):
+                return name, None
             return name, version
+
+    # Space delimiter — check if the LAST token looks like a version
+    if ' ' in tech:
+        tokens = tech.split()
+        last_token = tokens[-1]
+        if re.match(r'\d', last_token):
+            # Last token starts with digit → treat as version, rest is the name
+            name = ' '.join(tokens[:-1]).lower()
+            version = _extract_semver(last_token)
+            return name, version
+        # Multi-word name without version (e.g., "Apache Tomcat")
+        return tech.lower(), None
+
     return tech.lower(), None
 
 
@@ -90,9 +296,33 @@ def normalize_product_name(name: str) -> str:
     """Normalize product name for lookup."""
     name = name.lower().strip()
     aliases = {
-        "nginx": "nginx", "apache httpd": "apache", "microsoft-iis": "iis",
-        "node": "node.js", "nodejs": "node.js", "postgres": "postgresql",
-        "mongo": "mongodb", "wp": "wordpress", "ssh": "openssh",
+        # Apache variants
+        "apache httpd": "apache", "apache http server": "apache",
+        "apache2": "apache", "httpd": "apache",
+        "apache-coyote": "tomcat", "apache coyote": "tomcat",
+        "apache tomcat": "tomcat",
+        "apache couchdb": "couchdb", "apache kafka": "kafka",
+        "apache zookeeper": "zookeeper",
+        # Microsoft
+        "microsoft-iis": "iis", "microsoft iis": "iis",
+        "microsoft-httpapi": "iis",
+        # Node/JS
+        "node": "node.js", "nodejs": "node.js",
+        "nextjs": "next.js",
+        "expressjs": "express",
+        "ruby on rails": "rails", "rubyonrails": "rails",
+        # Databases
+        "postgres": "postgresql", "mongo": "mongodb",
+        # CMS
+        "wp": "wordpress",
+        # SSH/FTP
+        "ssh": "openssh", "pure-ftpd": "pureftpd",
+        # Proxies
+        "squid-cache": "squid",
+        "varnish cache": "varnish",
+        # Multi-word server names
+        "phusion passenger": "passenger",
+        "eclipse jetty": "jetty",
     }
     return aliases.get(name, name)
 
@@ -308,13 +538,17 @@ def run_cve_lookup(
     # Extract technologies from httpx
     technologies = set()
     httpx_data = recon_data.get("http_probe", {})
-    
+
     for url_data in httpx_data.get("by_url", {}).values():
         techs = url_data.get("technologies", [])
         technologies.update(techs)
         server = url_data.get("server")
         if server:
-            technologies.add(server)
+            # Split compound server headers like
+            # "Apache/2.4.49 (Unix) OpenSSL/1.1.1l PHP/8.1.2"
+            # into individual product strings
+            for product in split_server_header(server):
+                technologies.add(product)
     
     # Filter technologies to lookup
     tech_to_lookup = []
