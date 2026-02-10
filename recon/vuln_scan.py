@@ -109,7 +109,7 @@ def run_vuln_scan(recon_data: dict, output_file: Path = None, settings: dict = N
     NUCLEI_INTERACTSH = settings.get('NUCLEI_INTERACTSH', True)
     NUCLEI_DOCKER_IMAGE = settings.get('NUCLEI_DOCKER_IMAGE', 'projectdiscovery/nuclei:latest')
     USE_TOR_FOR_RECON = settings.get('USE_TOR_FOR_RECON', False)
-    KATANA_DEPTH = settings.get('KATANA_DEPTH', 3)
+    KATANA_DEPTH = settings.get('KATANA_DEPTH', 2)
     NUCLEI_AUTO_UPDATE_TEMPLATES = settings.get('NUCLEI_AUTO_UPDATE_TEMPLATES', True)
     CVE_LOOKUP_ENABLED = settings.get('CVE_LOOKUP_ENABLED', True)
     CVE_LOOKUP_SOURCE = settings.get('CVE_LOOKUP_SOURCE', 'nvd')

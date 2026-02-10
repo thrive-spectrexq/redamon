@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, FolderOpen, Users, RefreshCw } from 'lucide-react'
+import { Plus, FolderOpen, Users, RefreshCw, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useProjects, useDeleteProject } from '@/hooks/useProjects'
-import { useUsers, useCreateUser } from '@/hooks/useUsers'
+import { useUsers, useCreateUser, useDeleteUser } from '@/hooks/useUsers'
 import { useProject } from '@/providers/ProjectProvider'
 import { ProjectCard } from '@/components/projects/ProjectCard'
 import styles from './page.module.css'
@@ -21,11 +21,14 @@ export default function ProjectsPage() {
   const { data: projects, isLoading: projectsLoading, refetch } = useProjects(userId || undefined)
   const deleteProjectMutation = useDeleteProject()
   const createUserMutation = useCreateUser()
+  const deleteUserMutation = useDeleteUser()
+  const hasAutoSelected = useRef(false)
 
-  // Auto-select first user if none selected and users exist
+  // Auto-select first user only on initial load (not after explicit deselect)
   useEffect(() => {
-    if (!userId && users && users.length > 0) {
+    if (!hasAutoSelected.current && !userId && users && users.length > 0) {
       setUserId(users[0].id)
+      hasAutoSelected.current = true
     }
   }, [userId, users, setUserId])
 
@@ -62,6 +65,24 @@ export default function ProjectsPage() {
     }
   }
 
+  const handleDeleteUser = async () => {
+    if (!userId) return
+    const selectedUser = users?.find(u => u.id === userId)
+    const projectCount = selectedUser?._count?.projects ?? 0
+    const warning = projectCount > 0
+      ? `This will permanently delete user "${selectedUser?.name}" and their ${projectCount} project(s). This action cannot be undone.`
+      : `Are you sure you want to delete user "${selectedUser?.name}"? This action cannot be undone.`
+    if (confirm(warning)) {
+      try {
+        await deleteUserMutation.mutateAsync(userId)
+        setUserId(null)
+        setCurrentProject(null)
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Failed to delete user')
+      }
+    }
+  }
+
   const isLoading = usersLoading || projectsLoading
 
   return (
@@ -79,10 +100,17 @@ export default function ProjectsPage() {
           >
             <RefreshCw size={14} />
           </button>
-          <Link href="/projects/new" className="primaryButton">
-            <Plus size={14} />
-            New Project
-          </Link>
+          {userId ? (
+            <Link href="/projects/new" className="primaryButton">
+              <Plus size={14} />
+              New Project
+            </Link>
+          ) : (
+            <button className="primaryButton" disabled>
+              <Plus size={14} />
+              New Project
+            </button>
+          )}
         </div>
       </div>
 
@@ -110,23 +138,20 @@ export default function ProjectsPage() {
           <Plus size={12} />
           New User
         </button>
+        {userId && (
+          <button
+            className="iconButton"
+            onClick={handleDeleteUser}
+            disabled={deleteUserMutation.isPending}
+            title="Delete selected user"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
 
       {isLoading ? (
         <div className={styles.loading}>Loading...</div>
-      ) : !userId ? (
-        <div className={styles.empty}>
-          <Users size={48} />
-          <h2>No User Selected</h2>
-          <p>Select a user or create a new one to view projects.</p>
-          <button
-            className="primaryButton"
-            onClick={() => setShowUserModal(true)}
-          >
-            <Plus size={14} />
-            Create User
-          </button>
-        </div>
       ) : projects && projects.length > 0 ? (
         <div className={styles.grid}>
           {projects.map((project) => (
@@ -147,10 +172,17 @@ export default function ProjectsPage() {
           <FolderOpen size={48} />
           <h2>No Projects Yet</h2>
           <p>Create your first project to get started with reconnaissance.</p>
-          <Link href="/projects/new" className="primaryButton">
-            <Plus size={14} />
-            Create Project
-          </Link>
+          {userId ? (
+            <Link href="/projects/new" className="primaryButton">
+              <Plus size={14} />
+              Create Project
+            </Link>
+          ) : (
+            <button className="primaryButton" disabled>
+              <Plus size={14} />
+              Create Project
+            </button>
+          )}
         </div>
       )}
 

@@ -149,10 +149,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Katana Web Crawler
     'KATANA_ENABLED': True,
     'KATANA_DOCKER_IMAGE': 'projectdiscovery/katana:latest',
-    'KATANA_DEPTH': 3,
-    'KATANA_MAX_URLS': 500,
+    'KATANA_DEPTH': 2,
+    'KATANA_MAX_URLS': 300,
     'KATANA_RATE_LIMIT': 50,
-    'KATANA_TIMEOUT': 900,
+    'KATANA_TIMEOUT': 3600,
     'KATANA_JS_CRAWL': True,
     'KATANA_PARAMS_ONLY': False,
     'KATANA_EXCLUDE_PATTERNS': [
@@ -203,7 +203,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     ],
 
     # GAU Passive URL Discovery
-    'GAU_ENABLED': True,
+    'GAU_ENABLED': False,
     'GAU_DOCKER_IMAGE': 'sxcurity/gau:latest',
     'GAU_PROVIDERS': ['wayback', 'commoncrawl', 'otx', 'urlscan'],
     'GAU_MAX_URLS': 1000,

@@ -54,7 +54,7 @@ export function KatanaSection({ data, updateField }: KatanaSectionProps) {
                 type="number"
                 className="textInput"
                 value={data.katanaDepth}
-                onChange={(e) => updateField('katanaDepth', parseInt(e.target.value) || 3)}
+                onChange={(e) => updateField('katanaDepth', parseInt(e.target.value) || 2)}
                 min={1}
                 max={10}
               />
@@ -66,7 +66,7 @@ export function KatanaSection({ data, updateField }: KatanaSectionProps) {
                 type="number"
                 className="textInput"
                 value={data.katanaMaxUrls}
-                onChange={(e) => updateField('katanaMaxUrls', parseInt(e.target.value) || 500)}
+                onChange={(e) => updateField('katanaMaxUrls', parseInt(e.target.value) || 300)}
                 min={1}
               />
               <span className={styles.fieldHint}>Maximum number of URLs to collect per domain</span>
@@ -91,10 +91,10 @@ export function KatanaSection({ data, updateField }: KatanaSectionProps) {
                 type="number"
                 className="textInput"
                 value={data.katanaTimeout}
-                onChange={(e) => updateField('katanaTimeout', parseInt(e.target.value) || 900)}
+                onChange={(e) => updateField('katanaTimeout', parseInt(e.target.value) || 3600)}
                 min={60}
               />
-              <span className={styles.fieldHint}>Overall crawl timeout (default: 15 minutes)</span>
+              <span className={styles.fieldHint}>Overall crawl timeout (default: 60 minutes)</span>
             </div>
           </div>
 

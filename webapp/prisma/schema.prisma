@@ -141,10 +141,10 @@ model Project {
   // ========== KATANA WEB CRAWLER ==========
   katanaEnabled               Boolean  @default(true) @map("katana_enabled")
   katanaDockerImage           String   @default("projectdiscovery/katana:latest") @map("katana_docker_image")
-  katanaDepth                 Int      @default(3) @map("katana_depth")
-  katanaMaxUrls               Int      @default(500) @map("katana_max_urls")
+  katanaDepth                 Int      @default(2) @map("katana_depth")
+  katanaMaxUrls               Int      @default(300) @map("katana_max_urls")
   katanaRateLimit             Int      @default(50) @map("katana_rate_limit")
-  katanaTimeout               Int      @default(900) @map("katana_timeout")
+  katanaTimeout               Int      @default(3600) @map("katana_timeout")
   katanaJsCrawl               Boolean  @default(true) @map("katana_js_crawl")
   katanaParamsOnly            Boolean  @default(false) @map("katana_params_only")
   katanaExcludePatterns       String[] @default([]) @map("katana_exclude_patterns")
@@ -152,7 +152,7 @@ model Project {
   katanaCustomHeaders         String[] @default([]) @map("katana_custom_headers")
 
   // ========== GAU PASSIVE URL DISCOVERY ==========
-  gauEnabled                  Boolean  @default(true) @map("gau_enabled")
+  gauEnabled                  Boolean  @default(false) @map("gau_enabled")
   gauDockerImage              String   @default("sxcurity/gau:latest") @map("gau_docker_image")
   gauProviders                String[] @default(["wayback", "commoncrawl", "otx", "urlscan"]) @map("gau_providers")
   gauMaxUrls                  Int      @default(1000) @map("gau_max_urls")

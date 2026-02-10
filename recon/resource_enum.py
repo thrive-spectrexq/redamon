@@ -94,10 +94,10 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     # Katana settings
     KATANA_ENABLED = settings.get('KATANA_ENABLED', True)
     KATANA_DOCKER_IMAGE = settings.get('KATANA_DOCKER_IMAGE', 'projectdiscovery/katana:latest')
-    KATANA_DEPTH = settings.get('KATANA_DEPTH', 3)
-    KATANA_MAX_URLS = settings.get('KATANA_MAX_URLS', 5000)
-    KATANA_RATE_LIMIT = settings.get('KATANA_RATE_LIMIT', 100)
-    KATANA_TIMEOUT = settings.get('KATANA_TIMEOUT', 10)
+    KATANA_DEPTH = settings.get('KATANA_DEPTH', 2)
+    KATANA_MAX_URLS = settings.get('KATANA_MAX_URLS', 300)
+    KATANA_RATE_LIMIT = settings.get('KATANA_RATE_LIMIT', 50)
+    KATANA_TIMEOUT = settings.get('KATANA_TIMEOUT', 3600)
     KATANA_JS_CRAWL = settings.get('KATANA_JS_CRAWL', True)
     KATANA_PARAMS_ONLY = settings.get('KATANA_PARAMS_ONLY', False)
     KATANA_SCOPE = settings.get('KATANA_SCOPE', 'dn')
@@ -105,7 +105,7 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     KATANA_EXCLUDE_PATTERNS = settings.get('KATANA_EXCLUDE_PATTERNS', [])
 
     # GAU settings
-    GAU_ENABLED = settings.get('GAU_ENABLED', True)
+    GAU_ENABLED = settings.get('GAU_ENABLED', False)
     GAU_DOCKER_IMAGE = settings.get('GAU_DOCKER_IMAGE', 'sxcurity/gau:latest')
     GAU_PROVIDERS = settings.get('GAU_PROVIDERS', ['wayback', 'commoncrawl', 'otx', 'urlscan'])
     GAU_THREADS = settings.get('GAU_THREADS', 2)

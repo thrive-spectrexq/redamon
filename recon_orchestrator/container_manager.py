@@ -5,7 +5,7 @@ import asyncio
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
@@ -71,11 +71,11 @@ class ContainerManager:
                         exit_code = container.attrs.get("State", {}).get("ExitCode", -1)
                         if exit_code == 0:
                             state.status = ReconStatus.COMPLETED
-                            state.completed_at = datetime.utcnow()
+                            state.completed_at = datetime.now(timezone.utc)
                         else:
                             state.status = ReconStatus.ERROR
                             state.error = f"Container exited with code {exit_code}"
-                            state.completed_at = datetime.utcnow()
+                            state.completed_at = datetime.now(timezone.utc)
 
                         # Auto-cleanup: remove finished container
                         try:
@@ -137,7 +137,7 @@ class ContainerManager:
         state = ReconState(
             project_id=project_id,
             status=ReconStatus.STARTING,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc),
         )
         self.running_states[project_id] = state
 
@@ -254,7 +254,7 @@ class ContainerManager:
                 container.stop(timeout=timeout)
                 container.remove()
                 state.status = ReconStatus.IDLE
-                state.completed_at = datetime.utcnow()
+                state.completed_at = datetime.now(timezone.utc)
                 logger.info(f"Stopped recon container for project {project_id}")
             except NotFound:
                 state.status = ReconStatus.IDLE
@@ -273,9 +273,10 @@ class ContainerManager:
 
         return state
 
-    def _parse_log_line(self, line: str, current_phase: Optional[str], current_phase_num: Optional[int]) -> ReconLogEvent:
+    def _parse_log_line(self, line: str, current_phase: Optional[str], current_phase_num: Optional[int], timestamp: Optional[datetime] = None) -> ReconLogEvent:
         """Parse a log line and detect phase changes"""
-        timestamp = datetime.utcnow()
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
         phase = current_phase
         phase_num = current_phase_num
         is_phase_start = False
@@ -318,7 +319,7 @@ class ContainerManager:
         if not state.container_id:
             yield ReconLogEvent(
                 log="No container found for this project",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 level="error",
             )
             return
@@ -338,7 +339,7 @@ class ContainerManager:
             def read_logs():
                 """Synchronous function to read logs and put them in the queue"""
                 try:
-                    for line in container.logs(stream=True, follow=True, timestamps=False):
+                    for line in container.logs(stream=True, follow=True, timestamps=True):
                         asyncio.run_coroutine_threadsafe(
                             log_queue.put(line),
                             loop
@@ -374,7 +375,29 @@ class ContainerManager:
 
                     decoded_line = line.decode("utf-8", errors="replace").strip()
                     if decoded_line:
-                        event = self._parse_log_line(decoded_line, current_phase, current_phase_num)
+                        # Parse Docker timestamp prefix (RFC3339Nano format)
+                        docker_ts = None
+                        log_text = decoded_line
+                        # Docker timestamps look like: 2024-01-15T10:30:00.123456789Z <log line>
+                        if len(decoded_line) > 30 and decoded_line[4] == '-' and decoded_line[10] == 'T':
+                            space_idx = decoded_line.find(' ')
+                            if space_idx > 0:
+                                ts_str = decoded_line[:space_idx]
+                                try:
+                                    # Truncate nanoseconds to microseconds for stdlib compatibility
+                                    # Docker: 2024-01-15T10:30:00.123456789Z -> 2024-01-15T10:30:00.123456+00:00
+                                    ts_clean = ts_str.replace('Z', '+00:00')
+                                    dot_idx = ts_clean.find('.')
+                                    plus_idx = ts_clean.find('+', dot_idx) if dot_idx > 0 else -1
+                                    if dot_idx > 0 and plus_idx > 0:
+                                        frac = ts_clean[dot_idx + 1:plus_idx][:6]  # max 6 digits
+                                        ts_clean = ts_clean[:dot_idx + 1] + frac + ts_clean[plus_idx:]
+                                    docker_ts = datetime.fromisoformat(ts_clean)
+                                    log_text = decoded_line[space_idx + 1:]
+                                except (ValueError, OverflowError):
+                                    pass
+
+                        event = self._parse_log_line(log_text, current_phase, current_phase_num, timestamp=docker_ts)
 
                         # Update current phase tracking
                         if event.is_phase_start:
@@ -400,13 +423,13 @@ class ContainerManager:
         except NotFound:
             yield ReconLogEvent(
                 log="Container stopped",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 level="info",
             )
         except Exception as e:
             yield ReconLogEvent(
                 log=f"Error streaming logs: {e}",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 level="error",
             )
 
