@@ -165,7 +165,7 @@ export default function GraphPage() {
       let total = 0
       data.nodes.forEach(node => {
         const isGvmVuln = node.type === 'Vulnerability' && node.properties?.source === 'gvm'
-        const isGvmTech = node.type === 'Technology' && node.properties?.detected_by?.includes('gvm')
+        const isGvmTech = node.type === 'Technology' && (node.properties?.detected_by as string[] | undefined)?.includes('gvm')
         if (isGvmVuln || isGvmTech) {
           const type = node.type || 'Unknown'
           gvmTypes[type] = (gvmTypes[type] || 0) + 1
