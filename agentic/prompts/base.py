@@ -42,10 +42,6 @@ def build_tool_availability_table(phase, allowed_tools):
     for name, info in visible:
         lines.append(f"| **{name}** | {info['purpose']} | {info['when_to_use']} |")
 
-    lines.append("\n**Tool Selection Priority:**")
-    for i, (name, info) in enumerate(visible, 1):
-        lines.append(f"{i}. **{name}** - {info['when_to_use']}")
-
     lines.append(f"\n**Current phase allows:** {', '.join(t[0] for t in visible)}")
     return "\n".join(lines) + "\n"
 
@@ -151,14 +147,7 @@ def build_dynamic_rules(allowed_tools):
 
     rules.append(f"{rule_num}. Request phase transition ONLY when moving from informational to exploitation (or exploitation to post_exploitation)")
     rule_num += 1
-
-    if "metasploit_console" in allowed_tools:
-        rules.append(f'{rule_num}. **CRITICAL**: If current_phase is "exploitation", you MUST use action="use_tool" with tool_name="metasploit_console"')
-        rule_num += 1
-
     rules.append(f"{rule_num}. NEVER request transition to the same phase you're already in - this will be ignored")
-    rule_num += 1
-    rules.append(f"{rule_num}. **Follow the detailed Metasploit workflow** in the EXPLOITATION_TOOLS section - complete ALL steps before exploitation")
     rule_num += 1
     rules.append(f"{rule_num}. **Add exploitation steps as TODO items** and mark them in_progress/completed as you go")
 
@@ -186,38 +175,6 @@ MODE_DECISION_MATRIX = """
 
 
 # =============================================================================
-# COMMON METASPLOIT HEADER
-# =============================================================================
-
-METASPLOIT_CONSOLE_HEADER = """
-### Exploitation Phase Tools
-
-All Informational tools PLUS:
-
-4. **metasploit_console** (Primary for exploitation)
-   - Execute Metasploit Framework commands
-   - Module context and sessions persist between calls
-   - **Chain commands with `;` (semicolons)**: `set RHOSTS 1.2.3.4; set RPORT 22; set USERNAME root`
-   - **DO NOT use `&&` or `||`** - these shell operators are NOT supported!
-   - Metasploit state is auto-reset on first use in each session
-   - Simple system commands (curl, wget, python3) can be run directly in msfconsole
-
-   **msfconsole Shell Limitations (CRITICAL — read before running system commands):**
-   - **NO variable assignment:** `VAR=$(command)` does NOT work — msfconsole is not bash
-   - **NO heredocs:** `<<'EOF'` does NOT work
-   - **NO subshell expansion:** `$(...)` or backticks do NOT work
-   - **Complex quoting breaks:** Nested quotes, special characters, and escaping behave differently than bash
-   - **For complex commands:** Write a script to a file first, then execute the file:
-     ```
-     echo 'import base64; print(base64.b64encode(b"payload").decode())' > /opt/output/gen.py
-     python3 /opt/output/gen.py
-     ```
-   - **For multi-line scripts:** Use multiple `echo ... >> file` commands to build the script, then run it
-   - **If a command fails due to quoting/parsing:** Do NOT retry with slightly different escaping — switch to the file-based approach immediately
-"""
-
-
-# =============================================================================
 # REACT SYSTEM PROMPT
 # =============================================================================
 
@@ -235,34 +192,14 @@ You work step-by-step using the Thought-Tool-Output pattern:
 
 {phase_definitions}
 
-## Orchestrator Auto-Logic (Behind the Scenes)
+## Orchestrator Auto-Logic
 
-**Understanding orchestrator behavior prevents confusion and duplicate requests:**
-
-### Phase Transitions
-The orchestrator handles transitions automatically in some cases:
-
-| Transition Type                | Orchestrator Behavior                                    | Your Action                          |
-|--------------------------------|----------------------------------------------------------|--------------------------------------|
-| Same phase -> Same phase        | Ignored, returns to think                                | Don't re-request same phase          |
-| Exploitation -> Informational   | Auto-approved (safe downgrade)                           | Transition happens immediately       |
-| Info -> Exploitation            | Requires user approval                                   | Use action="transition_phase"        |
-| Exploitation -> Post-Expl       | Requires user approval                                   | Use action="transition_phase"        |
-| Just transitioned              | Marker set (`_just_transitioned_to`), ignores duplicates | Don't re-request immediately         |
-
-**Key takeaway:** Don't request transition to the phase you're already in - orchestrator ignores these requests and returns you to think.
-
-### Session Detection
-The orchestrator automatically detects when Metasploit sessions are established:
-
-- **Detection pattern:** Regex matches output containing `session X opened` or `Meterpreter session X`
-- **Auto-adds to state:** Sessions automatically added to `target_info.sessions` - you don't need to track manually
-- **What this means:** After session opens, just request transition to post_exploitation phase - orchestrator already knows about the session
-
-### Tool Execution
-- **Metasploit auto-reset:** First `metasploit_console` call in session resets msfconsole state (clears previous modules/sessions)
-- **Tool output truncation:** Output limited to 20000 chars to prevent context overflow
-- **Phase restrictions:** Orchestrator enforces which tools work in which phases, but always check before using
+- Same-phase transitions are silently ignored — don't re-request your current phase
+- Exploitation → Informational: auto-approved (safe downgrade)
+- Info → Exploitation, Exploitation → Post-Expl: require user approval via action="transition_phase"
+- Sessions auto-detected from output ("session X opened") and added to target_info — no manual tracking needed
+- First `metasploit_console` call per session auto-resets msfconsole state
+- Tool output is auto-truncated to prevent context overflow
 
 ## Intent Detection (CRITICAL)
 

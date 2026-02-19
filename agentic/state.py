@@ -290,7 +290,8 @@ class AttackPathClassification(BaseModel):
     LLM classification of attack path type and required phase from user objective.
 
     Uses structured output for reliable parsing and Pydantic validation.
-    Determines BOTH the phase (informational/exploitation) AND the attack path type.
+    Determines BOTH the phase (informational/exploitation) AND the attack path type,
+    plus an optional secondary attack path for fallback.
     """
     required_phase: Phase = Field(
         default="informational",
@@ -298,6 +299,10 @@ class AttackPathClassification(BaseModel):
     )
     attack_path_type: AttackPathType = Field(
         description="The classified attack path type based on user intent (only used for exploitation phase)"
+    )
+    secondary_attack_path: Optional[str] = Field(
+        default=None,
+        description="Fallback attack path if primary fails (e.g., brute_force after CVE exploit fails). null if no alternative."
     )
     confidence: float = Field(
         ge=0.0, le=1.0,
@@ -555,6 +560,23 @@ def format_execution_trace(
         lines.append(f"[Showing last {limit} of {len(trace)} total steps]")
         lines.append("")
 
+    # Determine which steps are "recent" (last 5) — these get full output
+    # Older steps get compact formatting (no raw tool_output, shorter analysis)
+    recent_count = 5
+    recent_step_ids = set()
+    if len(limited_trace) > recent_count:
+        for step in limited_trace[-recent_count:]:
+            sid = step.get("step_id")
+            if sid:
+                recent_step_ids.add(sid)
+    # If trace is short enough, all steps are recent
+    all_recent = len(limited_trace) <= recent_count
+
+    def _is_recent(step):
+        if all_recent:
+            return True
+        return step.get("step_id") in recent_step_ids
+
     # Build objective boundaries from objective_history
     # Each completed objective in history has 'execution_steps' (step IDs)
     completed_step_ids = set()
@@ -574,7 +596,7 @@ def format_execution_trace(
                 lines.append(f"{'='*60}\n")
 
                 for step in obj_steps:
-                    lines.extend(_format_single_step(step))
+                    lines.extend(_format_single_step(step, compact=not _is_recent(step)))
 
     # Current objective steps (not in completed history)
     current_steps = [s for s in limited_trace if s.get("step_id") not in completed_step_ids]
@@ -590,13 +612,19 @@ def format_execution_trace(
         lines.append(f"{'='*60}\n")
 
         for step in current_steps:
-            lines.extend(_format_single_step(step))
+            lines.extend(_format_single_step(step, compact=not _is_recent(step)))
 
     return "\n".join(lines)
 
 
-def _format_single_step(step: dict) -> List[str]:
-    """Format a single execution step."""
+def _format_single_step(step: dict, compact: bool = False) -> List[str]:
+    """Format a single execution step.
+
+    Args:
+        step: Execution step dict.
+        compact: If True, omit raw tool_output and truncate analysis to save tokens.
+                 Used for older steps where the agent only needs a summary.
+    """
     lines = []
     iteration = step.get("iteration", "?")
     phase = step.get("phase", "unknown")
@@ -613,22 +641,24 @@ def _format_single_step(step: dict) -> List[str]:
         lines.append(f"Tool: {tool}")
         if tool_args:
             args_str = str(tool_args)
-            lines.append(f"Args: {args_str[:10000]}..." if len(args_str) > 10000 else f"Args: {args_str}")
+            max_args = 200 if compact else 10000
+            lines.append(f"Args: {args_str[:max_args]}..." if len(args_str) > max_args else f"Args: {args_str}")
 
-        # CRITICAL: Include full tool output so agent can reference results
-        # This is essential for exploitation workflows where search/info results
-        # must be used in subsequent exploit commands
-        tool_output = step.get("tool_output", "")
-        if tool_output:
-            max_output_len = 10000
-            if len(tool_output) > max_output_len:
-                lines.append(f"Output (truncated):\n{tool_output[:max_output_len]}...\n[{len(tool_output) - max_output_len} more chars]")
-            else:
-                lines.append(f"Output:\n{tool_output}")
+        if not compact:
+            # Full tool output for recent steps — essential for exploitation workflows
+            # where search/info results must be used in subsequent commands
+            tool_output = step.get("tool_output", "")
+            if tool_output:
+                max_output_len = 10000
+                if len(tool_output) > max_output_len:
+                    lines.append(f"Output (truncated):\n{tool_output[:max_output_len]}...\n[{len(tool_output) - max_output_len} more chars]")
+                else:
+                    lines.append(f"Output:\n{tool_output}")
 
         if step.get("output_analysis"):
             analysis = step["output_analysis"]
-            lines.append(f"Analysis: {analysis[:10000]}..." if len(analysis) > 10000 else f"Analysis: {analysis}")
+            max_analysis = 1000 if compact else 10000
+            lines.append(f"Analysis: {analysis[:max_analysis]}..." if len(analysis) > max_analysis else f"Analysis: {analysis}")
 
     if error_msg:
         lines.append(f"Error: {error_msg}")

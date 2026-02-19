@@ -530,7 +530,13 @@ class AgentOrchestrator:
 
         # Get phase tools with attack path type for dynamic routing
         attack_path_type = state.get("attack_path_type", "cve_exploit")
-        available_tools = get_phase_tools(phase, get_setting('ACTIVATE_POST_EXPL_PHASE', True), get_setting('POST_EXPL_PHASE_TYPE', 'statefull'), attack_path_type)
+        available_tools = get_phase_tools(
+            phase,
+            get_setting('ACTIVATE_POST_EXPL_PHASE', True),
+            get_setting('POST_EXPL_PHASE_TYPE', 'statefull'),
+            attack_path_type,
+            execution_trace=state.get("execution_trace", []),
+        )
 
         # Get allowed tools for the current phase (filtered, no internal tools)
         allowed_tools = [t for t in get_allowed_tools_for_phase(phase) if t not in INTERNAL_TOOLS]
@@ -552,6 +558,37 @@ class AgentOrchestrator:
             target_info=target_info_formatted,
             qa_history=qa_history_formatted,
         )
+
+        # Failure loop detection: if 3+ consecutive similar failures, inject warning
+        exec_trace = state.get("execution_trace", [])
+        if len(exec_trace) >= 3:
+            consecutive_failures = 0
+            last_pattern = None
+            for step in reversed(exec_trace[-6:]):
+                output_lower = ((step.get("tool_output") or "")[:500]).lower()
+                is_failure = (
+                    not step.get("success", True)
+                    or "failed" in output_lower
+                    or "error" in output_lower
+                    or "exploit completed, but no session" in output_lower
+                )
+                if is_failure:
+                    pattern = f"{step.get('tool_name')}:{str(step.get('tool_args', {}))[:80]}"
+                    if last_pattern is None or pattern == last_pattern:
+                        consecutive_failures += 1
+                        last_pattern = pattern
+                    else:
+                        break
+                else:
+                    break
+
+            if consecutive_failures >= 3:
+                system_prompt += (
+                    "\n\n## FAILURE LOOP DETECTED\n\n"
+                    "You have failed 3+ times with a similar approach. You MUST try a completely "
+                    "different strategy: use `web_search` for alternative techniques, try a different "
+                    "tool or payload, or use action='ask_user' for guidance. Do NOT retry the same approach.\n"
+                )
 
         # CHECK: Is there a pending tool output to analyze?
         # When execute_tool ran before this think node, _current_step has tool_output but no output_analysis yet

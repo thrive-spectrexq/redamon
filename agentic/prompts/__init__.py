@@ -10,7 +10,6 @@ from .base import (
     TOOL_REGISTRY,
     INTERNAL_TOOLS,
     MODE_DECISION_MATRIX,
-    METASPLOIT_CONSOLE_HEADER,
     REACT_SYSTEM_PROMPT,
     PENDING_OUTPUT_ANALYSIS_SECTION,
     PHASE_TRANSITION_MESSAGE,
@@ -55,11 +54,30 @@ from utils import get_session_config_prompt
 from project_settings import get_setting, get_allowed_tools_for_phase
 
 
+def _msf_search_failed(execution_trace: list) -> bool:
+    """Check if a Metasploit `search` command returned no results in the trace."""
+    for step in execution_trace:
+        if step.get("tool_name") != "metasploit_console":
+            continue
+        output = step.get("tool_output") or ""
+        args = step.get("tool_args") or {}
+        command = args.get("command", "") if isinstance(args, dict) else str(args)
+        # Only match actual search commands, not other msf commands
+        if "search " in command.lower() and (
+            "No results" in output
+            or "0 results" in output
+            or "did not match" in output.lower()
+        ):
+            return True
+    return False
+
+
 def get_phase_tools(
     phase: str,
     activate_post_expl: bool = True,
     post_expl_type: str = "stateless",
-    attack_path_type: str = "cve_exploit"
+    attack_path_type: str = "cve_exploit",
+    execution_trace: list = None,
 ) -> str:
     """Get tool descriptions for the current phase with attack path-specific guidance.
 
@@ -72,6 +90,7 @@ def get_phase_tools(
                            If False, exploitation is the final phase.
         post_expl_type: "statefull" for Meterpreter sessions, "stateless" for single commands.
         attack_path_type: Type of attack path ("cve_exploit", "brute_force_credential_guess")
+        execution_trace: List of execution steps (used to detect MSF search failures).
 
     Returns:
         Concatenated tool descriptions appropriate for the phase, mode, and attack path.
@@ -98,8 +117,8 @@ def get_phase_tools(
     # Dynamic tool availability table (only shows allowed tools)
     parts.append(build_tool_availability_table(phase, allowed_tools))
 
-    # Add mode decision matrix for exploitation/post-expl (only for CVE exploit path)
-    if phase in ["exploitation", "post_exploitation"] and attack_path_type == "cve_exploit":
+    # Add mode decision matrix for exploitation only (not needed in post-expl, mode already determined)
+    if phase == "exploitation" and attack_path_type == "cve_exploit":
         # Mode context
         target_types = "Dropper/Staged/Meterpreter" if is_statefull else "Command/In-Memory/Exec"
         post_expl_note = "Interactive session commands available" if is_statefull else "Re-run exploit with different CMD values"
@@ -133,11 +152,13 @@ def get_phase_tools(
                 # Select payload guidance based on post_expl_type
                 payload_guidance = CVE_PAYLOAD_GUIDANCE_STATEFULL if is_statefull else CVE_PAYLOAD_GUIDANCE_STATELESS
                 parts.append(payload_guidance)
-                # No-module fallback when search returns no modules
-                if is_statefull:
-                    parts.append(NO_MODULE_FALLBACK_STATEFULL)
-                else:
-                    parts.append(NO_MODULE_FALLBACK_STATELESS)
+                # No-module fallback: only inject full workflow AFTER msf search returned no results
+                # This saves ~1,100-1,350 tokens when a module IS found
+                if _msf_search_failed(execution_trace or []):
+                    if is_statefull:
+                        parts.append(NO_MODULE_FALLBACK_STATEFULL)
+                    else:
+                        parts.append(NO_MODULE_FALLBACK_STATELESS)
                 # Add pre-configured session settings for statefull mode
                 # (AFTER fallback so agent sees LHOST/LPORT/BIND values)
                 if is_statefull:
@@ -179,7 +200,6 @@ __all__ = [
     "build_dynamic_rules",
     # Base prompts
     "MODE_DECISION_MATRIX",
-    "METASPLOIT_CONSOLE_HEADER",
     "REACT_SYSTEM_PROMPT",
     "PENDING_OUTPUT_ANALYSIS_SECTION",
     "PHASE_TRANSITION_MESSAGE",

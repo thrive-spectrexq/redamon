@@ -32,6 +32,21 @@ RUN apt-get install -y --fix-missing \
     net-tools \
     iputils-ping \
     dnsutils \
+    netcat-traditional \
+    socat \
+    rlwrap \
+    # Exploitation & post-exploitation
+    exploitdb \
+    john \
+    smbclient \
+    sqlmap \
+    jq \
+    # Compilers (for execute_code C/C++ support)
+    gcc \
+    g++ \
+    make \
+    # Scripting (for execute_code perl support)
+    perl \
     # Build dependencies for naabu (requires libpcap)
     libpcap-dev \
     # Clean up

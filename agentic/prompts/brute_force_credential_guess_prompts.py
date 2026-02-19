@@ -4,14 +4,12 @@ RedAmon Brute Force Credential Guess Prompts
 Prompts for brute force credential guess attack workflows.
 """
 
-from .base import METASPLOIT_CONSOLE_HEADER
-
 
 # =============================================================================
 # BRUTE FORCE CREDENTIAL GUESS TOOLS (Multi-attempt workflow with OS detection)
 # =============================================================================
 
-BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS = METASPLOIT_CONSOLE_HEADER + """
+BRUTE_FORCE_CREDENTIAL_GUESS_TOOLS = """
 ## ⚠️ ATTACK PATH: BRUTE FORCE CREDENTIAL GUESS ⚠️
 
 **CRITICAL: This objective has been CLASSIFIED as brute force credential guessing.**
@@ -306,89 +304,5 @@ BRUTE_FORCE_CREDENTIAL_GUESS_WORDLIST_GUIDANCE = """
 |------|-------------|
 | `snmp_default_pass.txt` | SNMP community strings |
 
-### IPMI (Server Management)
-| File | Description |
-|------|-------------|
-| `ipmi_users.txt` | IPMI usernames |
-| `ipmi_passwords.txt` | IPMI passwords |
-
-### iDRAC (Dell Server Management)
-| File | Description |
-|------|-------------|
-| `idrac_default_user.txt` | iDRAC usernames |
-| `idrac_default_pass.txt` | iDRAC passwords |
-
-### Routers / Network Devices
-| File | Description |
-|------|-------------|
-| `routers_userpass.txt` | Router default credentials |
-| `dlink_telnet_backdoor_userpass.txt` | D-Link telnet backdoor creds |
-| `telnet_cdata_ftth_backdoor_userpass.txt` | CDATA FTTH backdoor creds |
-
-### CCTV / DVR
-| File | Description |
-|------|-------------|
-| `multi_vendor_cctv_dvr_users.txt` | CCTV/DVR usernames |
-| `multi_vendor_cctv_dvr_pass.txt` | CCTV/DVR passwords |
-
-### IoT / Embedded / Botnets
-| File | Description |
-|------|-------------|
-| `mirai_user.txt` | Mirai botnet usernames |
-| `mirai_pass.txt` | Mirai botnet passwords |
-| `mirai_user_pass.txt` | Mirai user:pass combos |
-| `vxworks_common_20.txt` | VxWorks common passwords |
-| `vxworks_collide_20.txt` | VxWorks collision passwords |
-
-### SCADA / Industrial
-| File | Description |
-|------|-------------|
-| `scada_default_userpass.txt` | SCADA default credentials |
-
-### CMS / Applications
-| File | Description |
-|------|-------------|
-| `cms400net_default_userpass.txt` | CMS 400.NET defaults |
-| `grafana_plugins.txt` | Grafana plugins list |
-| `flask_secret_keys.txt` | Flask secret keys |
-| `superset_secret_keys.txt` | Apache Superset secret keys |
-
-### SAP
-| File | Description |
-|------|-------------|
-| `sap_common.txt` | SAP common passwords |
-| `sap_default.txt` | SAP default credentials |
-| `sap_icm_paths.txt` | SAP ICM paths |
-
-### Other Services
-| File | Description |
-|------|-------------|
-| `rpc_names.txt` | RPC service names |
-| `rservices_from_users.txt` | R-services user mappings |
-| `sid.txt` | Oracle SID list |
-| `tftp.txt` | TFTP paths |
-| `named_pipes.txt` | Windows named pipes |
-| `lync_subdomains.txt` | Microsoft Lync subdomains |
-| `sensitive_files.txt` | Linux sensitive file paths |
-| `sensitive_files_win.txt` | Windows sensitive file paths |
-
-### Unhashed Defaults (for hash cracking context)
-| File | Description |
-|------|-------------|
-| `default_users_for_services_unhash.txt` | Default usernames |
-| `default_pass_for_services_unhash.txt` | Default passwords |
-| `default_userpass_for_services_unhash.txt` | Default user:pass |
-| `hci_oracle_passwords.csv` | Oracle HCI passwords |
-
-### Miscellaneous
-| File | Description |
-|------|-------------|
-| `adobe_top100_pass.txt` | Adobe breach top 100 |
-| `dangerzone_a.txt` | High-risk passwords (set A) |
-| `dangerzone_b.txt` | High-risk passwords (set B) |
-| `av-update-urls.txt` | Antivirus update URLs |
-| `av_hips_executables.txt` | AV/HIPS executable names |
-| `can_flood_frames.txt` | CAN bus flood frames |
-| `malicious_urls.txt` | Known malicious URLs |
-| `telerik_ui_asp_net_ajax_versions.txt` | Telerik UI versions |
+For other service-specific wordlists (IoT, SCADA, SAP, routers, etc.), check `/usr/share/metasploit-framework/data/wordlists/` or use `web_search`.
 """
