@@ -63,6 +63,8 @@ Get your key from [Anthropic Console](https://console.anthropic.com/) or [OpenAI
 
 **Additional AI providers** (optional — add these to unlock more models):
 ```env
+OPENAI_COMPAT_BASE_URL=http://host.docker.internal:11434/v1  # OpenAI-compatible endpoint (e.g. Ollama on host)
+OPENAI_COMPAT_API_KEY=                                        # optional (fallback token "ollama" is used if empty)
 OPENROUTER_API_KEY=sk-or-...   # OpenRouter — access 300+ models (Llama, Gemini, Mistral, etc.) via openrouter.ai
 AWS_ACCESS_KEY_ID=AKIA...      # AWS Bedrock — access foundation models (Claude, Titan, Llama, etc.)
 AWS_SECRET_ACCESS_KEY=...      # AWS Bedrock secret key
@@ -477,21 +479,24 @@ For full details on all 10 attack path categories, the intent router architectur
 
 ### AI Model Providers
 
-RedAmon supports **four AI providers** out of the box, giving you access to **400+ language models** through a single, unified interface. The model selector in the project settings **dynamically fetches** available models from each provider whose API key is configured — no hardcoded lists, no manual updates. When a provider releases a new model, it appears automatically.
+RedAmon supports **five AI providers** out of the box, giving you access to **400+ language models** through a single, unified interface. The model selector in the project settings **dynamically fetches** available models from each configured provider — no hardcoded lists, no manual updates. When a provider releases a new model, it appears automatically.
 
 | Provider | Models | Pricing | API Key Required |
 |----------|--------|---------|-----------------|
 | **OpenAI** (Direct) | ~30 chat models — GPT-5.2, GPT-5, GPT-4.1, o3, o4-mini, and more | Pay-per-token via OpenAI | `OPENAI_API_KEY` |
 | **Anthropic** (Direct) | ~15 models — Claude Opus 4.6, Sonnet 4.6/4.5, Haiku 4.5 | Pay-per-token via Anthropic | `ANTHROPIC_API_KEY` |
+| **OpenAI-Compatible** | Any self-hosted or third-party OpenAI-compatible API (for example Ollama, local gateways, proxies). Model lists come directly from your backend; choose chat-capable models manually | Depends on your backend | `OPENAI_COMPAT_BASE_URL` (`OPENAI_COMPAT_API_KEY` optional) |
 | **OpenRouter** | **300+ models** — Llama 4, Gemini 3, Mistral, Qwen, DeepSeek, Command R+, and hundreds more from 50+ providers routed through a single API | Variable per model (some free) | `OPENROUTER_API_KEY` |
 | **AWS Bedrock** | ~60 foundation models — Claude, Titan, Llama, Cohere Command, Mistral, AI21 Jamba, and more | Pay-per-token via AWS | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` |
 
 #### How It Works
 
-1. **API key detection** — On startup, the agent checks which provider API keys are set in the environment. Only providers with valid keys are queried.
-2. **Dynamic model fetching** — The agent's `/models` endpoint fetches available models from all configured providers in parallel (OpenAI API, Anthropic API, OpenRouter API, AWS Bedrock `ListFoundationModels`). Results are cached for 1 hour.
+1. **Provider detection** — On startup, the agent checks which provider credentials/URLs are set in the environment. Only configured providers are queried.
+2. **Dynamic model fetching** — The agent's `/models` endpoint fetches available models from all configured providers in parallel (OpenAI API, Anthropic API, OpenAI-compatible `/models`, OpenRouter API, AWS Bedrock `ListFoundationModels`). Results are cached for 1 hour.
 3. **Searchable model selector** — The project settings UI presents a searchable dropdown grouped by provider. Each model shows its name, context window size, and pricing info. Type to filter across all providers instantly.
-4. **Provider prefix convention** — Models are stored with a provider prefix (`openrouter/`, `bedrock/`) so the agent knows which SDK to use at runtime. OpenAI and Anthropic models are detected by name pattern (no prefix needed). Existing projects continue to work unchanged.
+4. **Provider prefix convention** — Models are stored with a provider prefix (`openai_compat/`, `openrouter/`, `bedrock/`) so the agent knows which SDK to use at runtime. OpenAI and Anthropic models are detected by name pattern (no prefix needed). Existing projects continue to work unchanged.
+
+> **Note (OpenAI-Compatible):** RedAmon does not automatically validate chat capability for models returned by your compatible backend. If the backend exposes embedding/audio/image models, select a chat model manually.
 
 #### Provider Setup
 
@@ -501,6 +506,10 @@ RedAmon supports **four AI providers** out of the box, giving you access to **40
 # Direct providers (lowest latency, direct API connection)
 OPENAI_API_KEY=sk-proj-...          # OpenAI — platform.openai.com/api-keys
 ANTHROPIC_API_KEY=sk-ant-...        # Anthropic — console.anthropic.com
+
+# OpenAI-compatible providers (self-hosted or third-party)
+OPENAI_COMPAT_BASE_URL=http://host.docker.internal:11434/v1  # Example: Ollama running on your host
+OPENAI_COMPAT_API_KEY=                                        # Optional; fallback token "ollama" is used if empty
 
 # Gateway providers (access many models through one key)
 OPENROUTER_API_KEY=sk-or-...        # OpenRouter — openrouter.ai/settings/keys
@@ -896,7 +905,7 @@ Configure the AI agent orchestrator that performs autonomous pentesting. Control
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| LLM Model | claude-opus-4-6 | The language model powering the agent. Supports four providers: **OpenAI** (GPT-5.2, GPT-5, GPT-4.1), **Anthropic** (Claude Opus 4.6, Sonnet 4.5, Haiku 4.5), **OpenRouter** (300+ models — Llama, Gemini, Mistral, etc.), and **AWS Bedrock** (Claude, Titan, Llama, etc.). Models are **dynamically fetched** from each provider whose API key is configured — the dropdown updates automatically. Each provider requires its own API key in `.env` |
+| LLM Model | claude-opus-4-6 | The language model powering the agent. Supports five providers: **OpenAI** (GPT-5.2, GPT-5, GPT-4.1), **Anthropic** (Claude Opus 4.6, Sonnet 4.5, Haiku 4.5), **OpenAI-Compatible** (for example Ollama via a custom base URL), **OpenRouter** (300+ models — Llama, Gemini, Mistral, etc.), and **AWS Bedrock** (Claude, Titan, Llama, etc.). Models are **dynamically fetched** from each configured provider — the dropdown updates automatically. |
 | Post-Exploitation Type | statefull | `statefull` — keeps Meterpreter sessions between turns. `stateless` — executes one-shot commands |
 | Activate Post-Exploitation Phase | true | Whether post-exploitation is available at all. When disabled, the agent stops after exploitation |
 | Informational Phase System Prompt | — | Custom instructions injected during the informational/recon phase. Leave empty for default |
@@ -1580,6 +1589,7 @@ These containers are designed to be deployed alongside the main stack so the AI 
 | **LangGraph** | State machine engine implementing the ReAct (Reasoning + Acting) agent loop |
 | **OpenAI** (Direct) | Supported LLM family — GPT-5.2, GPT-5, GPT-4.1. Requires `OPENAI_API_KEY` |
 | **Anthropic** (Direct) | Supported LLM family — Claude Opus 4.6, Sonnet 4.5, Haiku 4.5. Requires `ANTHROPIC_API_KEY` |
+| **OpenAI-Compatible** | Any OpenAI-compatible endpoint (for example Ollama). Requires `OPENAI_COMPAT_BASE_URL`; optional `OPENAI_COMPAT_API_KEY` |
 | **OpenRouter** | Multi-model gateway — access 300+ models (Llama 4, Gemini 3, Mistral, Qwen, etc.) through a single API key. Uses OpenAI-compatible endpoint. Requires `OPENROUTER_API_KEY` |
 | **AWS Bedrock** | Managed AWS service — access foundation models (Claude, Titan, Llama, Cohere, etc.) via `langchain-aws`. Requires `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` |
 | **Tavily** | AI-powered web search used by the agent for CVE research and exploit intelligence |

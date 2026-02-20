@@ -48,6 +48,10 @@ type ChatItem = Message | ThinkingItem | ToolExecutionItem
 
 /** Format prefixed model names for display (e.g. "openrouter/meta-llama/llama-4" → "llama-4 (OR)") */
 function formatModelDisplay(model: string): string {
+  if (model.startsWith('openai_compat/')) {
+    const parts = model.slice('openai_compat/'.length).split('/')
+    return `${parts[parts.length - 1]} (OA-Compat)`
+  }
   if (model.startsWith('openrouter/')) {
     const parts = model.slice('openrouter/'.length).split('/')
     return `${parts[parts.length - 1]} (OR)`

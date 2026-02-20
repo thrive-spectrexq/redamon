@@ -167,7 +167,7 @@ export function AgentBehaviourSection({ data, updateField }: AgentBehaviourSecti
                             type="text"
                             value={data.agentOpenaiModel}
                             onChange={(e) => updateField('agentOpenaiModel', e.target.value)}
-                            placeholder="e.g. claude-opus-4-6, gpt-5.2, openrouter/meta-llama/llama-4-maverick"
+                            placeholder="e.g. claude-opus-4-6, gpt-5.2, openrouter/meta-llama/llama-4-maverick, openai_compat/llama3.1"
                             style={{ marginTop: 'var(--space-1)' }}
                           />
                         </div>
