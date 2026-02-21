@@ -15,18 +15,20 @@
   <img src="https://img.shields.io/badge/WARNING-SECURITY%20TOOL-B22222?style=for-the-badge" alt="Security Tool Warning"/>
   <img src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=for-the-badge" alt="MIT License"/>
   <br/>
+  <img src="https://img.shields.io/badge/FULL-KILL%20CHAIN-A01025?style=for-the-badge" alt="Full Kill Chain"/>
   <img src="https://img.shields.io/badge/AI-AUTONOMOUS%20AGENT-6A5ACD?style=for-the-badge&logo=openai&logoColor=white" alt="AI Powered"/>
-  <img src="https://img.shields.io/badge/400+-AI%20MODELS-04A878?style=for-the-badge&logo=huggingface&logoColor=white" alt="400+ AI Models"/>
   <img src="https://img.shields.io/badge/ZERO-HUMAN%20INTERVENTION-CC7722?style=for-the-badge" alt="Zero Click"/>
   <img src="https://img.shields.io/badge/Kali-Powered-466A7A?style=for-the-badge&logo=kalilinux&logoColor=white" alt="Kali Powered"/>
   <img src="https://img.shields.io/badge/Docker-Compose-1A7EC2?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
   <br/>
-  <img src="https://img.shields.io/badge/FULL-KILL%20CHAIN-A01025?style=for-the-badge" alt="Full Kill Chain"/>
   <img src="https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F-STEALTH%20MODE-1a1a2e?style=for-the-badge" alt="Stealth Mode"/>
   <img src="https://img.shields.io/badge/30+-SECURITY%20TOOLS-CC8F00?style=for-the-badge&logo=hack-the-box&logoColor=white" alt="30+ Security Tools"/>
   <img src="https://img.shields.io/badge/9,000+-VULN%20TEMPLATES-C2185B?style=for-the-badge" alt="9,000+ Vuln Templates"/>
   <img src="https://img.shields.io/badge/170K+-NETWORK%20NVTs-8E3FA0?style=for-the-badge" alt="170K+ NVTs"/>
   <img src="https://img.shields.io/badge/180+-PROJECT%20SETTINGS-00899B?style=for-the-badge" alt="180+ Settings"/>
+  <br/>
+  <img src="https://img.shields.io/badge/400+-AI%20MODELS-04A878?style=for-the-badge&logo=huggingface&logoColor=white" alt="400+ AI Models"/>
+  <img src="https://img.shields.io/badge/%F0%9F%96%A5%EF%B8%8F_LOCAL%20MODELS-OLLAMA%20%7C%20vLLM%20%7C%20LM%20Studio-FF6F00?style=for-the-badge" alt="Local Models Support"/>
 </p>
 
 > **LEGAL DISCLAIMER**: This tool is intended for **authorized security testing**, **educational purposes**, and **research only**. Never use this system to scan, probe, or attack any system you do not own or have explicit written permission to test. Unauthorized access is **illegal** and punishable by law. By using this tool, you accept **full responsibility** for your actions. **[Read Full Disclaimer](DISCLAIMER.md)**
@@ -44,6 +46,18 @@
 - [Docker](https://docs.docker.com/get-docker/) & Docker Compose v2+
 
 That's it. No Node.js, Python, or security tools needed on your host.
+
+#### Minimum System Requirements
+
+| Resource | Without OpenVAS | With OpenVAS (full stack) |
+|----------|----------------|--------------------------|
+| **CPU** | 2 cores | 4 cores |
+| **RAM** | 4 GB | 8 GB (16 GB recommended) |
+| **Disk** | 20 GB free | 50 GB free |
+
+> **Without OpenVAS** runs 6 containers: webapp, postgres, neo4j, agent, kali-sandbox, recon-orchestrator.
+> **With OpenVAS** adds 4 more runtime containers (gvmd, ospd-openvas, gvm-postgres, gvm-redis) plus ~8 one-shot data-init containers for vulnerability feeds (~170K+ NVTs). First launch takes ~30 minutes for GVM feed synchronization.
+> Dynamic recon and scan containers are spawned on-demand during operations and require additional resources.
 
 ### 1. Clone & Configure
 
@@ -172,6 +186,7 @@ No rebuild needed — just restart.
   - [Reconnaissance Pipeline](#reconnaissance-pipeline)
   - [AI Agent Orchestrator](#ai-agent-orchestrator)
   - [AI Model Providers](#ai-model-providers)
+  - [Local Models & OpenAI-Compatible Providers](#openai-compatible-provider)
   - [GitHub Secret Hunter](#github-secret-hunter)
   - [GVM Vulnerability Scanner](#gvm-vulnerability-scanner-optional)
   - [Attack Surface Graph](#attack-surface-graph)
@@ -523,6 +538,51 @@ AWS_DEFAULT_REGION=us-east-1        # Recommended: us-east-1 (N. Virginia) has t
 > **Note (Bedrock):** Foundation models on AWS Bedrock are now **automatically enabled** across all commercial regions when first invoked — no manual model access activation is required. Just create an IAM user with `bedrock:InvokeModel` and `bedrock:ListFoundationModels` permissions, set the credentials above, and start using any model immediately.
 
 > **Tip:** You can configure multiple providers simultaneously. The model selector will show all available models from all configured providers, letting you switch between a free Llama model on OpenRouter for testing and Claude Opus on Anthropic for production assessments — without changing any code.
+
+#### OpenAI-Compatible Provider
+
+Any backend that exposes the standard `/v1/chat/completions` and `/v1/models` endpoints works out of the box with RedAmon. Set `OPENAI_COMPAT_BASE_URL` in your `.env` and matching models appear in the project settings dropdown automatically.
+
+The agent container already includes `host.docker.internal` resolution, so local servers running on your host machine are reachable from Docker.
+
+> **Linux users:** Most local LLM servers (Ollama, vLLM, etc.) listen on `localhost` by default, which is **not reachable** from Docker containers. You need to bind the server to all interfaces (`0.0.0.0`). For Ollama installed via the official script:
+> ```bash
+> sudo bash -c 'mkdir -p /etc/systemd/system/ollama.service.d && echo -e "[Service]\nEnvironment=\"OLLAMA_HOST=0.0.0.0\"" > /etc/systemd/system/ollama.service.d/override.conf'
+> sudo systemctl daemon-reload && sudo systemctl restart ollama
+> ```
+> macOS and Windows (Docker Desktop) handle this automatically — no extra step needed.
+
+**Self-hosted / local (free):**
+
+| Provider | Description | Example `OPENAI_COMPAT_BASE_URL` |
+|----------|-------------|----------------------------------|
+| [Ollama](https://ollama.com/) | Easiest way to run local LLMs — single command setup | `http://host.docker.internal:11434/v1` |
+| [vLLM](https://github.com/vllm-project/vllm) | High-performance GPU inference server | `http://host.docker.internal:8000/v1` |
+| [LM Studio](https://lmstudio.ai/) | Desktop app with built-in local server | `http://host.docker.internal:1234/v1` |
+| [LocalAI](https://localai.io/) | Open-source OpenAI drop-in replacement, runs on CPU | `http://host.docker.internal:8080/v1` |
+| [Jan](https://jan.ai/) | Desktop app with ChatGPT-like UI and local server mode | `http://host.docker.internal:1337/v1` |
+| [llama.cpp server](https://github.com/ggerganov/llama.cpp) | Lightweight C++ inference | `http://host.docker.internal:8080/v1` |
+| [OpenLLM](https://github.com/bentoml/OpenLLM) | Run any open-source LLM with one command | `http://host.docker.internal:3000/v1` |
+| [text-generation-webui](https://github.com/oobabooga/text-generation-webui) | Gradio UI with OpenAI-compatible API extension | `http://host.docker.internal:5000/v1` |
+
+**Gateways / proxies (aggregate multiple providers behind one endpoint):**
+
+| Provider | Description |
+|----------|-------------|
+| [LiteLLM](https://github.com/BerriAI/litellm) | Proxy for 100+ LLMs in OpenAI format — self-hostable via Docker |
+
+**Cloud providers with OpenAI-compatible API:**
+
+| Provider | Description |
+|----------|-------------|
+| [Together AI](https://together.ai/) | 200+ open-source models, serverless |
+| [Groq](https://groq.com/) | Ultra-fast inference for Llama, Mixtral, Gemma |
+| [Fireworks AI](https://fireworks.ai/) | Fast open-source model hosting |
+| [Deepinfra](https://deepinfra.com/) | Pay-per-token open-source models |
+| [Mistral AI](https://mistral.ai/) | Mistral / Mixtral models via OpenAI-compatible endpoint |
+| [Perplexity](https://www.perplexity.ai/) | Sonar models via OpenAI-compatible API |
+
+> **Note:** RedAmon fetches all models from your compatible endpoint, including non-chat models (embeddings, audio, image). Make sure to select a **chat-capable** model in project settings.
 
 ---
 
