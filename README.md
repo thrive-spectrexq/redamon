@@ -110,19 +110,6 @@ docker compose up -d postgres neo4j recon-orchestrator kali-sandbox agent webapp
 
 Go to **http://localhost:3000** — create a project, configure your target, and start scanning.
 
-### Services
-
-| Service | URL |
-|---------|-----|
-| **Webapp** | http://localhost:3000 |
-| Neo4j Browser | http://localhost:7474 |
-| Recon Orchestrator | http://localhost:8010 |
-| Agent API | http://localhost:8090 |
-| MCP Network Recon (curl + naabu) | http://localhost:8000 |
-| MCP Nuclei | http://localhost:8002 |
-| MCP Metasploit | http://localhost:8003 |
-| MCP Nmap | http://localhost:8004 |
-
 ### Common Commands
 
 ```bash
@@ -195,6 +182,7 @@ No rebuild needed — just restart.
   - [High-Level Architecture](#high-level-architecture)
   - [Data Flow Pipeline](#data-flow-pipeline)
   - [Docker Container Architecture](#docker-container-architecture)
+  - [Exposed Services & Ports](#exposed-services--ports)
 - [Components](#components)
   - [Reconnaissance Pipeline](#1-reconnaissance-pipeline)
   - [Graph Database](#2-graph-database)
@@ -1073,6 +1061,18 @@ flowchart TB
         Postgres[(PostgreSQL<br/>Project Settings<br/>:5432)]
     end
 
+    subgraph LLMProviders["🧠 LLM Providers"]
+        OpenAI[OpenAI]
+        Anthropic[Anthropic]
+        LocalLLM[Local Models<br/>Ollama · vLLM · LM Studio]
+        OpenRouter[OpenRouter<br/>300+ Models]
+        Bedrock[AWS Bedrock]
+    end
+
+    subgraph External["🌐 External APIs"]
+        GitHubAPI[GitHub API<br/>Repos & Code Search]
+    end
+
     subgraph Targets["🎯 Target Layer"]
         Target[Target Systems]
         GuineaPigs[Guinea Pigs<br/>Test VMs]
@@ -1088,7 +1088,12 @@ flowchart TB
     ReconOrch -->|Docker SDK| GVM
     ReconOrch -->|Docker SDK| GHHunt
     Recon -->|Fetch Settings| Webapp
-    GHHunt -->|GitHub API| GHHunt
+    GHHunt -->|GitHub API| GitHubAPI
+    Agent -->|API| OpenAI
+    Agent -->|API| Anthropic
+    Agent -->|API| LocalLLM
+    Agent -->|API| OpenRouter
+    Agent -->|API| Bedrock
     Agent --> Neo4j
     Agent -->|MCP Protocol| NetworkRecon
     Agent -->|MCP Protocol| Nuclei
@@ -1191,7 +1196,7 @@ flowchart TB
             subgraph AgenticContainer["agentic-container"]
                 FastAPI[FastAPI :8090]
                 LangGraph[LangGraph Engine]
-                Claude[Claude AI]
+                LLMProvider[LLM Provider<br/>OpenAI · Anthropic · Local · OpenRouter · Bedrock]
             end
 
             subgraph Neo4jContainer["neo4j-container"]
@@ -1250,6 +1255,23 @@ flowchart TB
         ReconContainer -->|Fetch Settings| WebappContainer
     end
 ```
+
+### Exposed Services & Ports
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Webapp** | http://localhost:3000 | Main UI — create projects, configure targets, launch scans |
+| PostgreSQL | localhost:5432 | Primary database (Prisma) |
+| Neo4j Browser | http://localhost:7474 | Graph database UI for attack surface visualization |
+| Neo4j Bolt | localhost:7687 | Neo4j driver protocol (used by agent) |
+| Recon Orchestrator | http://localhost:8010 | Manages recon pipeline containers |
+| Agent API | http://localhost:8090 | AI agent WebSocket + REST API |
+| MCP Network Recon | http://localhost:8000 | curl + naabu (HTTP probing, port scanning) |
+| MCP Nuclei | http://localhost:8002 | Nuclei vulnerability scanner |
+| MCP Metasploit | http://localhost:8003 | Metasploit Framework RPC |
+| MCP Nmap | http://localhost:8004 | Nmap network scanner |
+| Metasploit Progress | http://localhost:8013 | Live progress streaming for long-running exploits |
+| Metasploit Listener | localhost:4444 | Reverse shell listener (Meterpreter) |
 
 ### Recon Pipeline Detail
 
