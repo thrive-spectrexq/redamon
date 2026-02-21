@@ -9,7 +9,8 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react'
-import { Send, Bot, User, Loader2, AlertCircle, Sparkles, RotateCcw, Shield, Target, Zap, HelpCircle, WifiOff, Wifi, Square, Play, Download, Wrench, EyeOff } from 'lucide-react'
+import { Send, Bot, User, Loader2, AlertCircle, Sparkles, RotateCcw, Shield, Target, Zap, HelpCircle, WifiOff, Wifi, Square, Play, Download, Wrench } from 'lucide-react'
+import { StealthIcon } from '@/components/icons/StealthIcon'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -991,12 +992,12 @@ export function AIAssistantDrawer({
               : 'Stealth Mode OFF — click to enable passive-only techniques'
             }
           >
-            <EyeOff size={11} />
+            <StealthIcon size={11} />
             <span>STEALTH</span>
           </button>
         ) : stealthMode ? (
           <span className={styles.stealthBadge} title="Stealth Mode — passive/low-noise techniques only">
-            <EyeOff size={11} />
+            <StealthIcon size={11} />
           </span>
         ) : null}
 

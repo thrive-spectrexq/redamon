@@ -20,15 +20,13 @@
   <img src="https://img.shields.io/badge/ZERO-HUMAN%20INTERVENTION-CC7722?style=for-the-badge" alt="Zero Click"/>
   <img src="https://img.shields.io/badge/Kali-Powered-466A7A?style=for-the-badge&logo=kalilinux&logoColor=white" alt="Kali Powered"/>
   <img src="https://img.shields.io/badge/Docker-Compose-1A7EC2?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
-  <br/>
-  <img src="https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F-STEALTH%20MODE-1a1a2e?style=for-the-badge" alt="Stealth Mode"/>
+  <img src="https://img.shields.io/badge/Stealth-Mode-5B21B6?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MDAgNjAwIiBmaWxsPSJ3aGl0ZSI+PHBvbHlnb24gcG9pbnRzPSI0MDAsODAgODAwLDQyMCA3MjAsNDIwIDY4MCwzODAgNjIwLDQyMCA1NjAsMzgwIDUwMCw0MjAgNDQwLDM4MCAzODAsNDIwIDMyMCwzODAgMjYwLDQyMCAyMDAsMzgwIDEyMCw0MjAgMCw0MjAiLz48L3N2Zz4=&logoColor=white" alt="Stealth Mode"/>
   <img src="https://img.shields.io/badge/30+-SECURITY%20TOOLS-CC8F00?style=for-the-badge&logo=hack-the-box&logoColor=white" alt="30+ Security Tools"/>
-  <img src="https://img.shields.io/badge/9,000+-VULN%20TEMPLATES-C2185B?style=for-the-badge" alt="9,000+ Vuln Templates"/>
+  <img src="https://img.shields.io/badge/9,000+-VULN%20TEMPLATES-8B1142?style=for-the-badge" alt="9,000+ Vuln Templates"/>
   <img src="https://img.shields.io/badge/170K+-NETWORK%20NVTs-8E3FA0?style=for-the-badge" alt="170K+ NVTs"/>
   <img src="https://img.shields.io/badge/180+-PROJECT%20SETTINGS-00899B?style=for-the-badge" alt="180+ Settings"/>
-  <br/>
   <img src="https://img.shields.io/badge/400+-AI%20MODELS-04A878?style=for-the-badge&logo=huggingface&logoColor=white" alt="400+ AI Models"/>
-  <img src="https://img.shields.io/badge/%F0%9F%96%A5%EF%B8%8F_LOCAL%20MODELS-OLLAMA%20%7C%20vLLM%20%7C%20LM%20Studio-FF6F00?style=for-the-badge" alt="Local Models Support"/>
+  <img src="https://img.shields.io/badge/%F0%9F%96%A5%EF%B8%8F_LOCAL%20MODELS-OLLAMA%20%7C%20vLLM%20%7C%20LM%20Studio-B85C00?style=for-the-badge" alt="Local Models Support"/>
 </p>
 
 > **LEGAL DISCLAIMER**: This tool is intended for **authorized security testing**, **educational purposes**, and **research only**. Never use this system to scan, probe, or attack any system you do not own or have explicit written permission to test. Unauthorized access is **illegal** and punishable by law. By using this tool, you accept **full responsibility** for your actions. **[Read Full Disclaimer](DISCLAIMER.md)**

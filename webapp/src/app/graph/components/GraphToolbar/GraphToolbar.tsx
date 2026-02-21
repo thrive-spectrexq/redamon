@@ -1,7 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Sparkles, Play, Download, Loader2, Terminal, Settings, Shield, Github, EyeOff } from 'lucide-react'
+import { Sparkles, Play, Download, Loader2, Terminal, Settings, Shield, Github } from 'lucide-react'
+import { StealthIcon } from '@/components/icons/StealthIcon'
 import { Toggle } from '@/components/ui'
 import type { ReconStatus, GvmStatus, GithubHuntStatus } from '@/lib/recon-types'
 import styles from './GraphToolbar.module.css'
@@ -90,212 +91,213 @@ export function GraphToolbar({
 
   return (
     <div className={styles.toolbar}>
-      <div className={styles.section}>
-        <span className={styles.sectionLabel}>View Mode</span>
-        <Toggle
-          checked={is3D}
-          onChange={onToggle3D}
-          labelOff="2D"
-          labelOn="3D"
-          aria-label="Toggle 2D/3D view"
-        />
-      </div>
+      <div className={styles.toolbarTopRow}>
+        <div className={styles.section}>
+          <span className={styles.sectionLabel}>View Mode</span>
+          <Toggle
+            checked={is3D}
+            onChange={onToggle3D}
+            labelOff="2D"
+            labelOn="3D"
+            aria-label="Toggle 2D/3D view"
+          />
+        </div>
 
-      <div className={styles.divider} />
+        <div className={styles.divider} />
 
-      <div className={styles.section}>
-        <span className={styles.sectionLabel}>Labels</span>
-        <Toggle
-          checked={showLabels}
-          onChange={onToggleLabels}
-          labelOff="Off"
-          labelOn="On"
-          aria-label="Toggle labels"
-        />
-      </div>
+        <div className={styles.section}>
+          <span className={styles.sectionLabel}>Labels</span>
+          <Toggle
+            checked={showLabels}
+            onChange={onToggleLabels}
+            labelOff="Off"
+            labelOn="On"
+            aria-label="Toggle labels"
+          />
+        </div>
 
-      {targetDomain && (
-        <>
-          <div className={styles.divider} />
-          <div className={styles.targetSection}>
-            {subdomainList.length > 0 && (
-              <div className={styles.subdomainWrapper}>
-                <span className={styles.subdomainList}>
-                  {subdomainList.join(', ')}
-                </span>
-                <div className={styles.subdomainTooltip}>
-                  {subdomainList.join(', ')}
+        <div className={styles.divider} />
+
+        <div className={styles.section}>
+          {targetDomain && (
+            <div className={styles.targetSection}>
+              {subdomainList.length > 0 && (
+                <div className={styles.subdomainWrapper}>
+                  <span className={styles.subdomainList}>
+                    {subdomainList.join(', ')}
+                  </span>
+                  <div className={styles.subdomainTooltip}>
+                    {subdomainList.join(', ')}
+                  </div>
                 </div>
+              )}
+              <span className={styles.targetDomain}>{targetDomain}</span>
+            </div>
+          )}
+
+          {stealthMode && (
+            <>
+              {targetDomain && <div className={styles.divider} />}
+              <div className={styles.stealthBadge} title="Stealth Mode is active — passive/low-noise techniques only">
+                <StealthIcon size={12} />
+                <span>Stealth</span>
               </div>
-            )}
-            <span className={styles.targetDomain}>{targetDomain}</span>
-          </div>
-        </>
-      )}
-
-      {stealthMode && (
-        <>
-          <div className={styles.divider} />
-          <div className={styles.stealthBadge} title="Stealth Mode is active — passive/low-noise techniques only">
-            <EyeOff size={12} />
-            <span>Stealth</span>
-          </div>
-        </>
-      )}
-
-      <div className={styles.spacer} />
-
-      {/* Recon Actions */}
-      {projectId && (
-        <>
-          <button
-            className={`${styles.reconButton} ${isReconRunning ? styles.reconButtonActive : ''}`}
-            onClick={onStartRecon}
-            disabled={isReconRunning}
-            title={isReconRunning ? 'Recon in progress...' : 'Start Reconnaissance'}
-          >
-            {isReconRunning ? (
-              <Loader2 size={14} className={styles.spinner} />
-            ) : (
-              <Play size={14} />
-            )}
-            <span>{isReconRunning ? 'Running...' : 'Start Recon'}</span>
-          </button>
-
-          {isReconRunning && (
-            <button
-              className={`${styles.logsButton} ${isLogsOpen ? styles.logsButtonActive : ''}`}
-              onClick={onToggleLogs}
-              title="View Logs"
-            >
-              <Terminal size={14} />
-            </button>
+            </>
           )}
+        </div>
+      </div>
 
+      <div className={styles.toolbarActionsRow}>
+        {/* Recon Actions */}
+        {projectId && (
+          <>
+            <div className={styles.actionGroup}>
+              <button
+                className={`${styles.reconButton} ${isReconRunning ? styles.reconButtonActive : ''}`}
+                onClick={onStartRecon}
+                disabled={isReconRunning}
+                title={isReconRunning ? 'Recon in progress...' : 'Start Reconnaissance'}
+              >
+                {isReconRunning ? (
+                  <Loader2 size={14} className={styles.spinner} />
+                ) : (
+                  <Play size={14} />
+                )}
+                <span>{isReconRunning ? 'Running...' : 'Start Recon'}</span>
+              </button>
+
+              {isReconRunning && (
+                <button
+                  className={`${styles.logsButton} ${isLogsOpen ? styles.logsButtonActive : ''}`}
+                  onClick={onToggleLogs}
+                  title="View Logs"
+                >
+                  <Terminal size={14} />
+                </button>
+              )}
+
+              <button
+                className={styles.downloadButton}
+                onClick={onDownloadJSON}
+                disabled={!hasReconData || isReconRunning}
+                title={hasReconData ? 'Download Recon JSON' : 'No data available'}
+              >
+                <Download size={14} />
+              </button>
+            </div>
+
+            {/* GVM Scan Actions */}
+            <div className={styles.actionGroup}>
+              <button
+                className={`${styles.gvmButton} ${isGvmRunning ? styles.gvmButtonActive : ''}`}
+                onClick={onStartGvm}
+                disabled={isGvmRunning || !hasReconData || stealthMode}
+                title={
+                  stealthMode
+                    ? 'GVM scanning is disabled in Stealth Mode (generates ~50,000 active probes per target)'
+                    : !hasReconData
+                    ? 'Run recon first'
+                    : isGvmRunning
+                    ? 'GVM scan in progress...'
+                    : 'Start GVM Vulnerability Scan'
+                }
+              >
+                {isGvmRunning ? (
+                  <Loader2 size={14} className={styles.spinner} />
+                ) : (
+                  <Shield size={14} />
+                )}
+                <span>{isGvmRunning ? 'Scanning...' : 'GVM Scan'}</span>
+              </button>
+
+              {isGvmRunning && (
+                <button
+                  className={`${styles.logsButton} ${isGvmLogsOpen ? styles.logsButtonActive : ''}`}
+                  onClick={onToggleGvmLogs}
+                  title="View GVM Logs"
+                >
+                  <Terminal size={14} />
+                </button>
+              )}
+
+              <button
+                className={styles.downloadButton}
+                onClick={onDownloadGvmJSON}
+                disabled={!hasGvmData || isGvmRunning}
+                title={hasGvmData ? 'Download GVM JSON' : 'No GVM data available'}
+              >
+                <Download size={14} />
+              </button>
+            </div>
+
+            {/* GitHub Secret Hunt Actions */}
+            <div className={styles.actionGroup}>
+              <button
+                className={`${styles.githubHuntButton} ${isGithubHuntRunning ? styles.githubHuntButtonActive : ''}`}
+                onClick={onStartGithubHunt}
+                disabled={isGithubHuntRunning || !hasReconData}
+                title={
+                  !hasReconData
+                    ? 'Run recon first'
+                    : isGithubHuntRunning
+                    ? 'GitHub hunt in progress...'
+                    : 'Start GitHub Secret Hunt'
+                }
+              >
+                {isGithubHuntRunning ? (
+                  <Loader2 size={14} className={styles.spinner} />
+                ) : (
+                  <Github size={14} />
+                )}
+                <span>{isGithubHuntRunning ? 'Hunting...' : 'GitHub Hunt'}</span>
+              </button>
+
+              {isGithubHuntRunning && (
+                <button
+                  className={`${styles.logsButton} ${isGithubHuntLogsOpen ? styles.logsButtonActive : ''}`}
+                  onClick={onToggleGithubHuntLogs}
+                  title="View GitHub Hunt Logs"
+                >
+                  <Terminal size={14} />
+                </button>
+              )}
+
+              <button
+                className={styles.downloadButton}
+                onClick={onDownloadGithubHuntJSON}
+                disabled={!hasGithubHuntData || isGithubHuntRunning}
+                title={hasGithubHuntData ? 'Download GitHub Hunt JSON' : 'No GitHub hunt data available'}
+              >
+                <Download size={14} />
+              </button>
+            </div>
+          </>
+        )}
+
+        <div className={styles.projectBadge}>
+          <span className={styles.projectLabel}>Project:</span>
+          <span className={styles.projectId}>{projectId}</span>
           <button
-            className={styles.downloadButton}
-            onClick={onDownloadJSON}
-            disabled={!hasReconData || isReconRunning}
-            title={hasReconData ? 'Download Recon JSON' : 'No data available'}
+            className={styles.settingsButton}
+            onClick={handleOpenSettings}
+            title="Project Settings"
+            aria-label="Open project settings"
           >
-            <Download size={14} />
+            <Settings size={14} />
           </button>
+        </div>
 
-          <div className={styles.divider} />
-
-          {/* GVM Scan Actions */}
-          <button
-            className={`${styles.gvmButton} ${isGvmRunning ? styles.gvmButtonActive : ''}`}
-            onClick={onStartGvm}
-            disabled={isGvmRunning || !hasReconData || stealthMode}
-            title={
-              stealthMode
-                ? 'GVM scanning is disabled in Stealth Mode (generates ~50,000 active probes per target)'
-                : !hasReconData
-                ? 'Run recon first'
-                : isGvmRunning
-                ? 'GVM scan in progress...'
-                : 'Start GVM Vulnerability Scan'
-            }
-          >
-            {isGvmRunning ? (
-              <Loader2 size={14} className={styles.spinner} />
-            ) : (
-              <Shield size={14} />
-            )}
-            <span>{isGvmRunning ? 'Scanning...' : 'GVM Scan'}</span>
-          </button>
-
-          {isGvmRunning && (
-            <button
-              className={`${styles.logsButton} ${isGvmLogsOpen ? styles.logsButtonActive : ''}`}
-              onClick={onToggleGvmLogs}
-              title="View GVM Logs"
-            >
-              <Terminal size={14} />
-            </button>
-          )}
-
-          <button
-            className={styles.downloadButton}
-            onClick={onDownloadGvmJSON}
-            disabled={!hasGvmData || isGvmRunning}
-            title={hasGvmData ? 'Download GVM JSON' : 'No GVM data available'}
-          >
-            <Download size={14} />
-          </button>
-
-          <div className={styles.divider} />
-
-          {/* GitHub Secret Hunt Actions */}
-          <button
-            className={`${styles.githubHuntButton} ${isGithubHuntRunning ? styles.githubHuntButtonActive : ''}`}
-            onClick={onStartGithubHunt}
-            disabled={isGithubHuntRunning || !hasReconData}
-            title={
-              !hasReconData
-                ? 'Run recon first'
-                : isGithubHuntRunning
-                ? 'GitHub hunt in progress...'
-                : 'Start GitHub Secret Hunt'
-            }
-          >
-            {isGithubHuntRunning ? (
-              <Loader2 size={14} className={styles.spinner} />
-            ) : (
-              <Github size={14} />
-            )}
-            <span>{isGithubHuntRunning ? 'Hunting...' : 'GitHub Hunt'}</span>
-          </button>
-
-          {isGithubHuntRunning && (
-            <button
-              className={`${styles.logsButton} ${isGithubHuntLogsOpen ? styles.logsButtonActive : ''}`}
-              onClick={onToggleGithubHuntLogs}
-              title="View GitHub Hunt Logs"
-            >
-              <Terminal size={14} />
-            </button>
-          )}
-
-          <button
-            className={styles.downloadButton}
-            onClick={onDownloadGithubHuntJSON}
-            disabled={!hasGithubHuntData || isGithubHuntRunning}
-            title={hasGithubHuntData ? 'Download GitHub Hunt JSON' : 'No GitHub hunt data available'}
-          >
-            <Download size={14} />
-          </button>
-
-          <div className={styles.divider} />
-        </>
-      )}
-
-      <div className={styles.projectBadge}>
-        <span className={styles.projectLabel}>Project:</span>
-        <span className={styles.projectId}>{projectId}</span>
         <button
-          className={styles.settingsButton}
-          onClick={handleOpenSettings}
-          title="Project Settings"
-          aria-label="Open project settings"
+          className={`${styles.aiButton} ${isAIOpen ? styles.aiButtonActive : ''}`}
+          onClick={onToggleAI}
+          aria-label="Toggle RedAmon Agent"
+          aria-expanded={isAIOpen}
+          title="RedAmon Agent"
         >
-          <Settings size={14} />
+          <Sparkles size={14} />
+          <span>RedAmon Agent</span>
         </button>
       </div>
-
-      <div className={styles.divider} />
-
-      <button
-        className={`${styles.aiButton} ${isAIOpen ? styles.aiButtonActive : ''}`}
-        onClick={onToggleAI}
-        aria-label="Toggle RedAmon Agent"
-        aria-expanded={isAIOpen}
-        title="RedAmon Agent"
-      >
-        <Sparkles size={14} />
-        <span>RedAmon Agent</span>
-      </button>
     </div>
   )
 }
