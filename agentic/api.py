@@ -124,10 +124,9 @@ async def get_defaults():
     """
     from project_settings import DEFAULT_AGENT_SETTINGS
 
-    def to_camel_case(snake_str: str) -> str:
-        """Convert SCREAMING_SNAKE_CASE to agentCamelCase."""
-        # Prefix with 'agent_' then convert to camelCase
-        prefixed = f"agent_{snake_str}"
+    def to_camel_case(snake_str: str, prefix: str = "agent") -> str:
+        """Convert SCREAMING_SNAKE_CASE to prefixCamelCase."""
+        prefixed = f"{prefix}_{snake_str}" if prefix else snake_str
         components = prefixed.lower().split('_')
         return components[0] + ''.join(x.title() for x in components[1:])
 
@@ -136,11 +135,18 @@ async def get_defaults():
     # duplicate "agentStealthMode" key that Prisma doesn't recognise.
     SKIP_KEYS = {'STEALTH_MODE'}
 
-    camel_case_defaults = {
-        to_camel_case(k): v
-        for k, v in DEFAULT_AGENT_SETTINGS.items()
-        if k not in SKIP_KEYS
-    }
+    # HYDRA_* keys map to Prisma fields without the 'agent' prefix
+    # (e.g. HYDRA_ENABLED -> hydraEnabled, not agentHydraEnabled)
+    NO_PREFIX_KEYS = {k for k in DEFAULT_AGENT_SETTINGS if k.startswith('HYDRA_')}
+
+    camel_case_defaults = {}
+    for k, v in DEFAULT_AGENT_SETTINGS.items():
+        if k in SKIP_KEYS:
+            continue
+        if k in NO_PREFIX_KEYS:
+            camel_case_defaults[to_camel_case(k, prefix="")] = v
+        else:
+            camel_case_defaults[to_camel_case(k)] = v
 
     return camel_case_defaults
 
